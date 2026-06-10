@@ -1131,6 +1131,10 @@
     });
   }
 
-  runAll();
-  setupObserver();
+  chrome.storage.sync.get({ ao3ZhEnabled: true }, (settings) => {
+    if (!settings.ao3ZhEnabled) return;
+
+    runAll();
+    setupObserver();
+  });
 })();
