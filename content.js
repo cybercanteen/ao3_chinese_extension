@@ -5,6 +5,18 @@
   const BTN_CLASS = "ao3-translate-btn";
   const TL_CLASS = "ao3-cn-translation";
   const NOTES_BTN_CLASS = "ao3-translate-notes-btn";
+  const CONTROL_HINT_CLASS = "ao3-control-hint";
+  const CONTROL_HINT_MARK = "data-ao3-zh-control-hint";
+  const CONTROL_HINTS = {
+    "Subscribe": "订阅更新",
+    "Unsubscribe": "取消订阅",
+    "Dismiss permanently": "永久关闭",
+    "Invite": "邀请",
+    "Post New": "发布新作品",
+    "Post New Work": "发布新作品",
+    "Edit Works": "编辑作品",
+    "I agree/consent to these Terms": "我同意这些条款"
+  };
 
   function injectStyles() {
     if (document.getElementById("ao3-zh-style")) return;
@@ -44,7 +56,8 @@
         font-size: 0.96em;
         white-space: pre-wrap;
       }
-      .ao3-submit-hint {
+      .ao3-submit-hint,
+      .${CONTROL_HINT_CLASS} {
         display: inline-block;
         margin-left: 8px;
         color: #666;
@@ -427,6 +440,56 @@
     return text;
   }
 
+  function getControlText(el) {
+    if (!el) return "";
+    if (el instanceof HTMLInputElement) {
+      return normalizeText(el.getAttribute("value") || el.value || "");
+    }
+    return normalizeText(el.textContent || "");
+  }
+
+  function isHintableControl(el) {
+    return el instanceof HTMLButtonElement ||
+      el instanceof HTMLInputElement ||
+      (el instanceof HTMLAnchorElement && (el.classList.contains("button") || el.closest(".actions, .navigation, #first-login-help-banner")));
+  }
+
+  function getControlHintText(el) {
+    if (!isHintableControl(el)) return "";
+
+    if (el instanceof HTMLInputElement) {
+      const type = (el.getAttribute("type") || "").toLowerCase();
+      if (!["button", "submit", "reset"].includes(type)) return "";
+    }
+
+    const text = getControlText(el);
+    return CONTROL_HINTS[text] || "";
+  }
+
+  function isHintOnlyControl(el) {
+    return !!getControlHintText(el);
+  }
+
+  function upsertControlHint(el) {
+    const hintText = getControlHintText(el);
+    if (!hintText) return;
+    if (el.offsetParent === null && !el.closest("#tos_prompt")) return;
+
+    el.setAttribute(CONTROL_HINT_MARK, "1");
+
+    let hint = el.nextElementSibling;
+    if (!hint || !hint.classList.contains(CONTROL_HINT_CLASS)) {
+      hint = document.createElement("span");
+      hint.className = CONTROL_HINT_CLASS;
+      el.insertAdjacentElement("afterend", hint);
+    }
+    hint.textContent = `（${hintText}）`;
+  }
+
+  function applyControlHints(root = document.body) {
+    root.querySelectorAll("button, input[type='button'], input[type='submit'], input[type='reset'], a.button, .actions a").forEach(upsertControlHint);
+  }
+
   function isSubmitInput(el) {
     return el instanceof HTMLInputElement &&
       (el.getAttribute("type") || "").toLowerCase() === "submit";
@@ -479,6 +542,8 @@
       if (!parent) continue;
       if (parent.hasAttribute(MARK)) continue;
       if (shouldSkipElement(parent)) continue;
+      const control = parent.closest("button, a.button, .actions a");
+      if (control && isHintOnlyControl(control)) continue;
 
       const original = node.nodeValue;
       const clean = normalizeText(original);
@@ -488,7 +553,6 @@
 
       if (translated !== original) {
         node.nodeValue = translated;
-        parent.setAttribute(MARK, "1");
       }
     }
   }
@@ -498,6 +562,10 @@
     fields.forEach(el => {
       if (el.hasAttribute(MARK)) return;
       if (shouldSkipElement(el)) return;
+      if (isHintOnlyControl(el)) {
+        upsertControlHint(el);
+        return;
+      }
 
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
         const name = el.getAttribute("name");
@@ -625,6 +693,10 @@
     ).forEach(el => {
       if (el.hasAttribute(MARK)) return;
       if (shouldSkipElement(el)) return;
+      if (isHintOnlyControl(el)) {
+        upsertControlHint(el);
+        return;
+      }
 
       const placeholder = el.getAttribute("placeholder");
       const title = el.getAttribute("title");
@@ -705,6 +777,10 @@
     ).forEach(el => {
       if (el.hasAttribute(MARK)) return;
       if (shouldSkipElement(el)) return;
+      if (isHintOnlyControl(el)) {
+        upsertControlHint(el);
+        return;
+      }
 
       const text = el.textContent || "";
       const translated = translateTextValue(text);
@@ -716,6 +792,10 @@
 
     document.querySelectorAll("#main input, #main textarea, #main select, #main a").forEach(el => {
       if (shouldSkipElement(el)) return;
+      if (isHintOnlyControl(el)) {
+        upsertControlHint(el);
+        return;
+      }
 
       const placeholder = el.getAttribute("placeholder");
       const title = el.getAttribute("title");
@@ -757,6 +837,10 @@
       root.querySelectorAll("h1, h2, h3, h4, a, button, label, legend, p, span, th, td, li, dt, dd, input").forEach(el => {
         if (el.hasAttribute(MARK)) return;
         if (shouldSkipElement(el)) return;
+        if (isHintOnlyControl(el)) {
+          upsertControlHint(el);
+          return;
+        }
 
         const text = el.textContent || "";
         const translated = translateTextValue(text);
@@ -804,6 +888,10 @@
       root.querySelectorAll("h3, h4, h5, a, button, label, legend, input, textarea, p, span, li").forEach(el => {
         if (el.hasAttribute(MARK)) return;
         if (el.closest(`.${TL_CLASS}`)) return;
+        if (isHintOnlyControl(el)) {
+          upsertControlHint(el);
+          return;
+        }
 
         const text = el.textContent || "";
         const placeholder = el.getAttribute("placeholder");
@@ -850,6 +938,11 @@
 
   function forceTranslateCommentActionLinks() {
     document.querySelectorAll("#feedback a, #comments a, .comment a, .thread a, #feedback button, #comments button, .comment button, .thread button").forEach(el => {
+      if (isHintOnlyControl(el)) {
+        upsertControlHint(el);
+        return;
+      }
+
       const text = (el.textContent || "").trim();
       if (!text) return;
 
@@ -871,6 +964,10 @@
       root.querySelectorAll("h1, h2, h3, h4, a, button, label, legend, p, span, th, td, input").forEach(el => {
         if (el.hasAttribute(MARK)) return;
         if (shouldSkipElement(el)) return;
+        if (isHintOnlyControl(el)) {
+          upsertControlHint(el);
+          return;
+        }
 
         const text = el.textContent || "";
         const translated = translateTextValue(text);
@@ -900,6 +997,10 @@
 
     banner.querySelectorAll("p, a, button, input, span").forEach(el => {
       if (el.hasAttribute(MARK)) return;
+      if (isHintOnlyControl(el)) {
+        upsertControlHint(el);
+        return;
+      }
 
       const text = el.textContent || "";
       const translated = translateTextValue(text);
@@ -939,6 +1040,10 @@
     modals.forEach(modal => {
       modal.querySelectorAll("h3, h4, p, a, button, input, span, li").forEach(el => {
         if (el.hasAttribute(MARK)) return;
+        if (isHintOnlyControl(el)) {
+          upsertControlHint(el);
+          return;
+        }
 
         const text = el.textContent || "";
         const translated = translateTextValue(text);
@@ -1100,6 +1205,7 @@
 
   function runAll() {
     injectStyles();
+    applyControlHints(document.body);
     translateFlashMessages(document.body);
     translateTextNodes(document.body);
     translateInputs(document.body);
@@ -1112,6 +1218,7 @@
     translateDashboardUI();
     translateFirstLoginBanner();
     translateDeleteCommentModal();
+    applyControlHints(document.body);
     insertTranslateButtons();
   }
 

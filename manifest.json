@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AO3中文助手",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "汉化AO3常规用户界面，并为章节与备注提供翻译按钮。",
   "host_permissions": [
     "https://archiveofourown.org/*",
@@ -9,13 +9,6 @@
   ],
   "background": {
     "service_worker": "background.js"
-  },
-  "action": {
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
-    }
   },
   "icons": {
     "16": "icons/icon16.png",
@@ -25,7 +18,12 @@
   "permissions": ["storage", "tabs"],
   "action": {
     "default_title": "AO3中文助手",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "content_scripts": [
     {
