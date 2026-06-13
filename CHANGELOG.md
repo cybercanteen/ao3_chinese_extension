@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2
+
+- 修复Bug。Bug fix.
+- 修订了字典。Add new content to the dictionary.
+  
 ## 1.0.1
 
 - 为该扩展程序添加了启用/禁用开关。Added an enable/disable toggle for the extension.
