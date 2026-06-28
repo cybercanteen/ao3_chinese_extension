@@ -17,7 +17,7 @@ https://archiveofourown.org
 
 ### Chrome Web Store
 
-插件上线后可以直接在Chrome Web Store安装。
+插件已在谷歌商店Chrome Web Store上线，可直接安装。
 
 ### 手动安装
 
