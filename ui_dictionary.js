@@ -9,7 +9,21 @@ window.AO3_UI_DICT = {
     "Post": "发布",
     "New Work": "新作品",
     "Import Work": "导入作品",
+    "From Draft": "发布草稿",
     "Log Out": "退出登录",
+    "Works in Collections": "合集中的作品",
+
+    // 右侧 / 全站常规 UI
+    "Sort and Filter": "排序与筛选",
+    "Edit Multiple Works": "批量编辑作品",
+    "You have no works or drafts to edit.": "目前没有可编辑的作品或草稿。",
+    "Invite": "邀请",
+    "I agree/consent to these Terms": "我同意这些条款",
+    "Include": "包含",
+    "Exclude": "排除",
+    "Other tags to include": "要包含的其他标签",
+    "Other tags to exclude": "要排除的其他标签",
+    "More Options": "更多选项",
 
     "Fandoms": "原作",
     "All Fandoms": "全部原作",
@@ -48,7 +62,7 @@ window.AO3_UI_DICT = {
     "Cancel Bookmark": "取消收藏",
     "Comments": "评论",
     "Share": "分享",
-    "Subscribe": "订阅",
+    "Subscribe": "订阅更新",
     "Unsubscribe": "取消订阅",
     "Download": "下载",
     "Go": "前往",
@@ -79,6 +93,7 @@ window.AO3_UI_DICT = {
 
     // 作品 meta 区
     "Rating:": "分级：",
+    "Ratings": "分级",
     "Archive Warning:": "警告：",
     "Category:": "分类：",
     "Fandom:": "原作：",
@@ -108,6 +123,7 @@ window.AO3_UI_DICT = {
     "Not Rated": "Not Rated（未分级）",
     "Tags are comma separated, 150 characters per tag. Fandom, relationship, character, and additional tags must not add up to more than 75. Archive warning, category, and rating tags do not count toward this limit.": "标签用逗号分隔，每个标签最多150个字符。原作、关系、角色及附加标签总数最多75个。归档警告、分类和分级标签不计入该数量限制。",
     "If this is the first work for a fandom, it may not show up in the fandoms page for a day or two.": "如果这是某个同人的第一部作品，可能要过一两天才会出现在该同人的页面上。",
+    "Please note: Unposted drafts are only saved for 30 days from the day they are first created, and then deleted from AO3.": "请注意：未发布的草稿仅会从初次创建之日起保存30天，之后将会从AO3删除。",
 
     "Choose Not To Use Archive Warnings": "作者选择不标警告",
     "No Archive Warnings Apply": "无警告适用",
@@ -130,7 +146,7 @@ window.AO3_UI_DICT = {
     "Post New Work": "发布新作品",
     "Import From An Existing URL Instead?": "改为从已有网址导入？",
     "Required information": "必填信息",
-    "Tags": "标签",
+    // "Tags" 已在顶部 Browse 区定义，此处删除重复键
     "Preface": "作品信息",
     "Associations": "系列与合集",
     "Privacy": "隐私设置",
@@ -138,6 +154,7 @@ window.AO3_UI_DICT = {
     "Publish": "发布",
     "Preview": "预览",
     "Cancel": "取消",
+    "Restore From Last Unposted Draft?": "载入上次未发布的草稿？",
 
     "Rating*": "分级*",
     "Archive Warnings*": "警告标签*",
@@ -163,7 +180,10 @@ window.AO3_UI_DICT = {
     "Author": "作者",
     "For a work in the Archive, only the URL is required.": "如果引用的是 AO3 站内作品，只填写 URL 即可。",
     "Chapter Title:": "章节标题:",
-    "Set a different publication date": "设置自定义发布日期",
+    // [FIX] 删除此重复键。原来第一次出现译为"设置自定义发布日期"，
+    // 第二次（下方 chapters/new 区）译为"设置不同的发布日期"，两者不同。
+    // JS 对象重复键取最后一个，导致这里的翻译被静默覆盖。
+    // 保留下方那一条（字面更准确），这里删除。
     "Set publication date": "设置发布日期",
     "Choose a language *": "选择语言 *",
     "Please select a language": "请选择语言",
@@ -268,7 +288,7 @@ window.AO3_UI_DICT = {
     "Complete works only": "只看已完结作品",
     "Works in progress only": "只看连载中作品",
 
-    "Crossovers": "Crossovers（跨圈）",
+    "Crossovers": "Crossovers（跨圈作品）",
     "Include crossovers": "包含跨圈",
     "Exclude crossovers": "排除跨圈",
     "Only crossovers": "仅跨圈",
@@ -282,10 +302,8 @@ window.AO3_UI_DICT = {
     "Rating": "分级",
     "Warnings": "警告",
     "Category": "作品类型",
-    "Fandoms": "原作",
-    "Relationships": "关系",
-    "Characters": "角色",
-    "Additional Tags": "附加标签",
+    // "Fandoms" / "Relationships" / "Characters" / "Additional Tags"
+    // 已在 works/new 区定义，此处删除 4 个重复键
 
     "Work Stats": "作品数据",
     "Hits": "点击数",
@@ -387,7 +405,7 @@ window.AO3_UI_DICT = {
     "Change Username": "修改用户名",
     "Change Password": "修改密码",
     "Change Email": "修改邮箱",
-    "Privacy": "隐私设置",
+    // "Privacy" 已在 works/new 区定义，此处删除重复键
     "Privacy preferences": "隐私设置说明",
     "Display": "显示设置",
     "Display preferences": "显示设置说明",
@@ -415,6 +433,8 @@ window.AO3_UI_DICT = {
     "Edit Tags": "编辑标签",
     "Edit Chapter": "编辑章节",
     "Chapter Management": "章节管理",
+    "Edit Chapter:": "编辑章节：",
+    "Manage Chapters": "管理章节",
 
     // Subscriptions / 订阅
     "My Subscriptions": "我的订阅",
@@ -431,7 +451,7 @@ window.AO3_UI_DICT = {
     "Delete All Work Subscriptions": "删除所有作品订阅",
 
     // Preferences Page Sections
-    "Comments": "评论",
+    // "Comments" 已在顶部作品页区定义，此处删除重复键
     "Collections, Challenges and Gifts": "合集、挑战与赠礼",
     "Misc": "杂项",
     "Update": "更新",

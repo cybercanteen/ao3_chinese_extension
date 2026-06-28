@@ -23,6 +23,8 @@
 
     const style = document.createElement("style");
     style.id = "ao3-zh-style";
+    // [FIX] Removed .ao3-submit-hint — submit buttons are now fully replaced,
+    // so the parenthetical-hint approach is no longer needed.
     style.textContent = `
       .${BTN_CLASS},
       .${NOTES_BTN_CLASS} {
@@ -56,15 +58,6 @@
         font-size: 0.96em;
         white-space: pre-wrap;
       }
-      .ao3-submit-hint,
-      .${CONTROL_HINT_CLASS} {
-        display: inline-block;
-        margin-left: 8px;
-        color: #666;
-        font-size: 14px;
-        line-height: 1.2;
-        vertical-align: middle;
-      }
     `;
     document.head.appendChild(style);
   }
@@ -96,6 +89,31 @@
     }
 
     return false;
+  }
+
+  // [新增] 安全替换元素文字：
+  // 若元素没有子元素，直接赋值 textContent（最常见情形，速度最快）。
+  // 若有子元素（内嵌图标 <i>、链接 <a>、必填星号 <span>* 等），
+  // 则只替换第一个有内容的直接文本节点，不碰子元素，避免抹掉嵌套结构。
+  function safeSetText(el, newText) {
+    if (!el) return;
+
+    // 没有子元素：直接改 textContent（最常见情形，速度最快）
+    if (el.children.length === 0) {
+      el.textContent = newText;
+      return;
+    }
+
+    // 有子元素（内嵌图标、链接、星号 <span> 等）：
+    // 只替换第一个有内容的直接文本节点，保留前后空白，不碰子元素结构。
+    for (const node of el.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim()) {
+        const leading  = node.nodeValue.match(/^\s*/)?.[0]  ?? "";
+        const trailing = node.nodeValue.match(/\s*$/)?.[0]  ?? "";
+        node.nodeValue = `${leading}${newText}${trailing}`;
+        return;
+      }
+    }
   }
 
   function translateExact(text) {
@@ -222,16 +240,16 @@
     }
 
     // Please wait...
-    if (/^Please wait\.\.\.$/i.test(clean)) {
+    if (/^Please wait\.\.\.$/.test(clean)) {
       return text.replace(clean, "请稍候...");
     }
 
     // Warning text in notes
-    if (/^Warning: Unchecking this box will delete the existing beginning note\.$/i.test(clean)) {
+    if (/^Warning: Unchecking this box will delete the existing beginning note\.$/.test(clean)) {
       return text.replace(clean, "警告：取消勾选后，将删除现有的开头备注。");
     }
 
-    if (/^Warning: Unchecking this box will delete the existing end note\.$/i.test(clean)) {
+    if (/^Warning: Unchecking this box will delete the existing end note\.$/.test(clean)) {
       return text.replace(clean, "警告：取消勾选后，将删除现有的结尾备注。");
     }
 
@@ -467,6 +485,13 @@
   }
 
   function isHintOnlyControl(el) {
+    // [FIX] input[type="submit"] 不走 hint 路径——它们由 replaceSubmitInput 处理。
+    // 原来这里没有排除，导致 "Subscribe" 等提交按钮被拦截走 hint，
+    // replaceSubmitInput 永远执行不到。
+    if (el instanceof HTMLInputElement &&
+        (el.getAttribute("type") || "").toLowerCase() === "submit") {
+      return false;
+    }
     return !!getControlHintText(el);
   }
 
@@ -474,44 +499,80 @@
     const hintText = getControlHintText(el);
     if (!hintText) return;
     if (el.offsetParent === null && !el.closest("#tos_prompt")) return;
+    if (el.hasAttribute(MARK)) return;
 
-    el.setAttribute(CONTROL_HINT_MARK, "1");
-
-    let hint = el.nextElementSibling;
-    if (!hint || !hint.classList.contains(CONTROL_HINT_CLASS)) {
-      hint = document.createElement("span");
-      hint.className = CONTROL_HINT_CLASS;
-      el.insertAdjacentElement("afterend", hint);
+    if (el instanceof HTMLInputElement) {
+      const type = (el.getAttribute("type") || "").toLowerCase();
+      // [FIX] input[type="submit"] 交给 replaceSubmitInput 处理，这里跳过且不设 MARK，
+      // 避免后续 translateInputs 认为它已处理而跳过 replaceSubmitInput。
+      if (type === "submit") return;
+      // input[type="button"] / input[type="reset"] 直接改 value（不影响表单提交）
+      el.value = hintText;
+    } else {
+      // <button>、<a> 等——直接替换显示文字，不再插入灰色提示 span。
+      // 效果：从 "Post New （发布新作品）" 变为直接显示 "发布新作品"。
+      safeSetText(el, hintText);
     }
-    hint.textContent = `（${hintText}）`;
+
+    el.setAttribute(MARK, "1");
   }
 
   function applyControlHints(root = document.body) {
     root.querySelectorAll("button, input[type='button'], input[type='submit'], input[type='reset'], a.button, .actions a").forEach(upsertControlHint);
   }
 
-  function isSubmitInput(el) {
-    return el instanceof HTMLInputElement &&
-      (el.getAttribute("type") || "").toLowerCase() === "submit";
-  }
+  // [FIX] 核心修复：彻底替换 isSubmitInput + upsertSubmitHint。
+  //
+  // 原来的 upsertSubmitHint 方案：在按钮后面插入 span.ao3-submit-hint，
+  // 显示"（保存草稿）"，视觉上是"Save Draft （保存草稿）"。
+  //
+  // 新方案：把 <input type="submit"> 替换成 <button type="submit">。
+  //
+  // 原理：对于 <button type="submit">，发送到服务器的是 value 属性（不是 textContent），
+  // 而显示给用户看的是 textContent。两者可以不同！
+  //
+  //   <button type="submit" name="commit" value="Save Draft">保存草稿</button>
+  //              ↑ 服务器看到这个（英文，Rails 逻辑不受影响）
+  //                                               ↑ 用户看到这个（中文）
+  //
+  // 这样既保留了表单提交的兼容性，又实现了完整的中文显示。
+  function replaceSubmitInput(el) {
+    if (!(el instanceof HTMLInputElement)) return;
+    const type = (el.getAttribute("type") || "").toLowerCase();
+    if (type !== "submit") return;
+    if (el.hasAttribute(MARK)) return;
 
-  function upsertSubmitHint(el) {
-    if (!isSubmitInput(el)) return;
-    if (el.offsetParent === null) return;
+    const originalValue = el.getAttribute("value") || el.value || "";
+    if (!originalValue) return;
 
-    const value = el.getAttribute("value") || "";
-    if (!value) return;
+    const chineseLabel = translateTextValue(originalValue);
+    if (!chineseLabel || chineseLabel === originalValue) return;
 
-    const translated = translateTextValue(value);
-    if (!translated || translated === value) return;
+    const btn = document.createElement("button");
+    btn.type = "submit";
+    btn.value = originalValue;       // 服务器看到原始英文 value
+    btn.textContent = chineseLabel;  // 用户看到中文
+    // [新增] 便于调试：通过 Inspect Element 可直接确认原始值与翻译值的对应关系
+    btn.setAttribute("data-ao3-original-value", originalValue);
 
-    let hint = el.nextElementSibling;
-    if (!hint || !hint.classList.contains("ao3-submit-hint")) {
-      hint = document.createElement("span");
-      hint.className = "ao3-submit-hint";
-      el.insertAdjacentElement("afterend", hint);
+    if (el.name) btn.name = el.name;
+    btn.className = el.className;
+    if (el.id) btn.id = el.id;
+    if (el.disabled) btn.disabled = true;
+
+    const formAttr = el.getAttribute("form");
+    if (formAttr) btn.setAttribute("form", formAttr);
+
+    // 保留其他属性（data-*、aria-* 等）
+    for (const { name, value } of el.attributes) {
+      if (!["type", "value", "name", "id", "class", "disabled", "form"].includes(name)) {
+        try { btn.setAttribute(name, value); } catch (_) {}
+      }
     }
-    hint.textContent = `（${translated}）`;
+
+    el.setAttribute(MARK, "1");
+    el.parentNode?.replaceChild(btn, el);
+    btn.setAttribute(MARK, "1");
   }
 
   function translateFlashMessages(root = document.body) {
@@ -526,7 +587,7 @@
 
       const translated = translateFlashTemplate(text);
       if (translated !== text) {
-        el.textContent = translated;
+        safeSetText(el, translated);
       }
 
       el.setAttribute(MARK, "1");
@@ -582,14 +643,16 @@
           }
         }
 
-        upsertSubmitHint(el);
+        // [FIX] 原来是 upsertSubmitHint(el)（在旁边加括号提示），
+        // 现在改为 replaceSubmitInput(el)（直接替换为显示中文的 button）。
+        replaceSubmitInput(el);
       }
 
       if (el instanceof HTMLButtonElement) {
         const text = el.textContent || "";
         const translatedText = translateTextValue(text);
         if (translatedText !== text) {
-          el.textContent = translatedText.trim();
+          safeSetText(el, translatedText.trim());
           el.setAttribute(MARK, "1");
         }
       }
@@ -598,7 +661,7 @@
         const text = el.textContent || "";
         const translatedText = translateTextValue(text);
         if (translatedText !== text) {
-          el.textContent = translatedText.trim();
+          safeSetText(el, translatedText.trim());
           el.setAttribute(MARK, "1");
         }
       }
@@ -624,7 +687,7 @@
       const original = dt.textContent || "";
       const translated = translateTextValue(original);
       if (translated !== original) {
-        dt.textContent = translated.trim();
+        safeSetText(dt, translated.trim());
       }
       dt.setAttribute(MARK, "1");
     });
@@ -659,7 +722,7 @@
           const t = x.textContent || "";
           const tr = translateTextValue(t);
           if (tr !== t) {
-            x.textContent = tr.trim();
+            safeSetText(x, tr.trim());
           }
           x.setAttribute(MARK, "1");
         });
@@ -683,7 +746,7 @@
       const original = el.textContent || "";
       const translated = translateTextValue(original);
       if (translated !== original) {
-        el.textContent = translated.trim();
+        safeSetText(el, translated.trim());
       }
       el.setAttribute(MARK, "1");
     });
@@ -703,7 +766,8 @@
       const aria = el.getAttribute("aria-label");
       const text = el.textContent || "";
 
-      upsertSubmitHint(el);
+      // [FIX] 原来是 upsertSubmitHint(el)，现在改为 replaceSubmitInput(el)
+      replaceSubmitInput(el);
 
       if (placeholder) {
         const translatedPlaceholder = translateTextValue(placeholder);
@@ -734,7 +798,7 @@
       ) {
         const translatedText = translateTextValue(text);
         if (translatedText !== text) {
-          el.textContent = translatedText.trim();
+          safeSetText(el, translatedText.trim());
         }
       }
 
@@ -785,12 +849,14 @@
       const text = el.textContent || "";
       const translated = translateTextValue(text);
       if (translated !== text) {
-        el.textContent = translated.trim();
+        safeSetText(el, translated.trim());
       }
       el.setAttribute(MARK, "1");
     });
 
     document.querySelectorAll("#main input, #main textarea, #main select, #main a").forEach(el => {
+      // [FIX] 原来漏掉了 MARK 检查，同一个 input 可能在多次 runAll() 里被重复处理。
+      if (el.hasAttribute(MARK)) return;
       if (shouldSkipElement(el)) return;
       if (isHintOnlyControl(el)) {
         upsertControlHint(el);
@@ -801,7 +867,8 @@
       const title = el.getAttribute("title");
       const aria = el.getAttribute("aria-label");
 
-      upsertSubmitHint(el);
+      // [FIX] 原来是 upsertSubmitHint(el)，现在改为 replaceSubmitInput(el)
+      replaceSubmitInput(el);
 
       if (placeholder) {
         const translatedPlaceholder = translateTextValue(placeholder);
@@ -823,6 +890,9 @@
           el.setAttribute("aria-label", translatedAria);
         }
       }
+
+      // 原来漏了 MARK，现在补上，防止重复处理
+      el.setAttribute(MARK, "1");
     });
   }
 
@@ -845,16 +915,15 @@
         const text = el.textContent || "";
         const translated = translateTextValue(text);
 
-        upsertSubmitHint(el);
+        // [FIX] 原来 upsertSubmitHint(el) 被错误地调用了三次（复制粘贴Bug）。
+        // 现在改为 replaceSubmitInput(el)，只调用一次。
+        replaceSubmitInput(el);
 
         if (translated !== text && !el.matches("input")) {
-          el.textContent = translated.trim();
+          safeSetText(el, translated.trim());
         }
 
         const title = el.getAttribute("title");
-
-        upsertSubmitHint(el);
-
         if (title) {
           const translatedTitle = translateTextValue(title);
           if (translatedTitle !== title) {
@@ -863,9 +932,6 @@
         }
 
         const aria = el.getAttribute("aria-label");
-
-        upsertSubmitHint(el);
-
         if (aria) {
           const translatedAria = translateTextValue(aria);
           if (translatedAria !== aria) {
@@ -901,7 +967,7 @@
         if (!el.matches("input, textarea")) {
           const translatedText = translateTextValue(text);
           if (translatedText !== text) {
-            el.textContent = translatedText.trim();
+            safeSetText(el, translatedText.trim());
           }
         }
 
@@ -948,9 +1014,53 @@
 
       const translated = translateTextValue(text);
       if (translated !== text) {
-        el.textContent = translated;
+        safeSetText(el, translated);
         el.setAttribute(MARK, "1");
       }
+    });
+  }
+
+  // 专门处理 Dashboard 首页"还没有发布内容"提示段落。
+  // 这个 <p> 里是"文字 + <a> + 文字 + <a>"的混排结构，无法用通用翻译函数处理：
+  //   - el.textContent = "..." 会把链接一起抹掉
+  //   - safeSetText 只改第一个文本节点，句子会截断
+  //   - translateTextNodes 处理的是碎片文本节点，无法匹配字典
+  // 正确做法：匹配整段原文 → 提取原 <a> 元素（保留 href、class、事件监听）
+  //           → 清空 <p> → 用中文文字节点 + 原 <a> 重新拼接句子。
+  function translateEmptyUserHomeMessage() {
+    document.querySelectorAll("#main p.alt.message").forEach(p => {
+      if (p.hasAttribute(MARK)) return;
+
+      const fullText = normalizeText(p.textContent || "");
+      if (
+        !/^You don't have anything posted under this name yet\. Would you like to post a new work or maybe a new bookmark\s*\?$/i
+          .test(fullText)
+      ) return;
+
+      const workLink = Array.from(p.querySelectorAll("a")).find(
+        a => a.getAttribute("href") === "/works/new" ||
+             normalizeText(a.textContent) === "post a new work"
+      );
+      const bookmarkLink = Array.from(p.querySelectorAll("a")).find(
+        a => a.getAttribute("href") === "/external_works/new" ||
+             normalizeText(a.textContent) === "new bookmark"
+      );
+
+      if (!workLink || !bookmarkLink) return;
+
+      // 只改链接显示文字，保留原 href / class / data-* / 事件监听
+      workLink.textContent   = "发布新作品";
+      bookmarkLink.textContent = "新增书签";
+
+      // 清空 <p>，用中文句子结构 + 原 <a> 重新拼接
+      p.textContent = "";
+      p.appendChild(document.createTextNode("这个用户名下还没有发布任何内容。要不要"));
+      p.appendChild(workLink);
+      p.appendChild(document.createTextNode("，或者"));
+      p.appendChild(bookmarkLink);
+      p.appendChild(document.createTextNode("？"));
+
+      p.setAttribute(MARK, "1");
     });
   }
 
@@ -972,10 +1082,11 @@
         const text = el.textContent || "";
         const translated = translateTextValue(text);
 
-        upsertSubmitHint(el);
+        // [FIX] 原来是 upsertSubmitHint(el)，现在改为 replaceSubmitInput(el)
+        replaceSubmitInput(el);
 
         if (translated !== text && !el.matches("input")) {
-          el.textContent = translated.trim();
+          safeSetText(el, translated.trim());
         }
 
         const title = el.getAttribute("title");
@@ -995,6 +1106,39 @@
     const banner = document.querySelector("#first-login-help-banner");
     if (!banner) return;
 
+    // [FIX] 原来用 banner.innerHTML = banner.innerHTML.replace(/and/g, "以及") 等，
+    // 这会把 HTML 属性里的 "and" 也替换掉（比如 href 里的 "and"），导致链接损坏。
+    // 现在改用 TreeWalker 只处理纯文本节点，完全不碰 HTML 结构。
+    const walker = document.createTreeWalker(banner, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const original = node.nodeValue;
+      if (!original || !original.trim()) continue;
+
+      let out = original;
+      out = out.replace(
+        /Hi! It looks like you've just logged in to AO3 for the first time\./g,
+        "你好！看起来这是你第一次登录 AO3。"
+      );
+      out = out.replace(
+        /For help getting started on AO3, check out some/g,
+        "如果你想快速上手 AO3，可以查看一些"
+      );
+      out = out.replace(/or browse through/g, "或浏览");
+      out = out.replace(/If you need technical support,/g, "如果你需要技术支持，");
+      out = out.replace(
+        /If you experience harassment or have questions about our/g,
+        "如果你遭遇骚扰，或对我们的"
+      );
+      out = out.replace(/\(including the/g, "（包括");
+      out = out.replace(/\),/g, "），");
+      // [FIX] 用词边界 \b 替代裸 /and/g，避免替换 "band"、"handle" 等单词中的 "and"
+      out = out.replace(/\band\b/g, "以及");
+
+      if (out !== original) node.nodeValue = out;
+    }
+
+    // 按钮 / 链接文字仍走普通翻译逻辑
     banner.querySelectorAll("p, a, button, input, span").forEach(el => {
       if (el.hasAttribute(MARK)) return;
       if (isHintOnlyControl(el)) {
@@ -1006,7 +1150,7 @@
       const translated = translateTextValue(text);
 
       if (translated !== text && !el.matches("input")) {
-        el.textContent = translated.trim();
+        safeSetText(el, translated.trim());
       }
 
       const title = el.getAttribute("title");
@@ -1019,16 +1163,6 @@
 
       el.setAttribute(MARK, "1");
     });
-
-    banner.innerHTML = banner.innerHTML
-      .replace(/Hi! It looks like you've just logged in to AO3 for the first time\./g, "你好！看起来这是你第一次登录 AO3。")
-      .replace(/For help getting started on AO3, check out some/g, "如果你想快速上手 AO3，可以查看一些")
-      .replace(/or browse through/g, "或浏览")
-      .replace(/If you need technical support,/g, "如果你需要技术支持，")
-      .replace(/If you experience harassment or have questions about our/g, "如果你遭遇骚扰，或对我们的")
-      .replace(/\(including the/g, "（包括")
-      .replace(/\),/g, "），")
-      .replace(/and/g, "以及");
   }
 
   function translateDeleteCommentModal() {
@@ -1049,7 +1183,7 @@
         const translated = translateTextValue(text);
 
         if (translated !== text && !el.matches("input")) {
-          el.textContent = translated.trim();
+          safeSetText(el, translated.trim());
         }
 
         const title = el.getAttribute("title");
@@ -1063,10 +1197,19 @@
         el.setAttribute(MARK, "1");
       });
 
-      modal.innerHTML = modal.innerHTML.replace(
-        /Are you sure you want to delete this comment\?/g,
-        "你确定要删除这条评论吗？"
-      );
+      // [FIX] 原来用 modal.innerHTML = modal.innerHTML.replace(...)，
+      // 会重写整个 modal 的 HTML，销毁 JS 事件监听器和 MARK 属性。
+      // 改用 TreeWalker 只处理纯文本节点，安全且不影响结构。
+      const walker = document.createTreeWalker(modal, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (node.nodeValue.includes("Are you sure you want to delete this comment?")) {
+          node.nodeValue = node.nodeValue.replace(
+            /Are you sure you want to delete this comment\?/g,
+            "你确定要删除这条评论吗？"
+          );
+        }
+      }
     });
   }
 
@@ -1152,7 +1295,6 @@
 
       if (!heading) return;
 
-      // 按钮插在 heading 后面，不一定在 section 里面，所以改成检查 heading 邻接节点
       if (heading.nextElementSibling && heading.nextElementSibling.classList.contains(BTN_CLASS)) {
         return;
       }
@@ -1207,6 +1349,7 @@
     injectStyles();
     applyControlHints(document.body);
     translateFlashMessages(document.body);
+    translateEmptyUserHomeMessage();   // 先跑：防止 translateTextNodes 把链接文本碎片化处理
     translateTextNodes(document.body);
     translateInputs(document.body);
     translateMetaSection();
@@ -1218,13 +1361,29 @@
     translateDashboardUI();
     translateFirstLoginBanner();
     translateDeleteCommentModal();
-    applyControlHints(document.body);
+    // [FIX] 原来这里有一个重复的 applyControlHints(document.body) 调用，已删除。
     insertTranslateButtons();
   }
 
   function setupObserver() {
     let timer = null;
-    const observer = new MutationObserver(() => {
+
+    const observer = new MutationObserver((mutations) => {
+      // [FIX 1] 去掉 characterData: true 后，我们只需要检测新增的 DOM 节点。
+      // 如果没有新增的、未处理的元素节点，就不触发 runAll()，避免空转。
+      let hasNewElements = false;
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE && !node.hasAttribute(MARK)) {
+            hasNewElements = true;
+            break;
+          }
+        }
+        if (hasNewElements) break;
+      }
+
+      if (!hasNewElements) return;
+
       clearTimeout(timer);
       timer = setTimeout(() => {
         runAll();
@@ -1234,7 +1393,10 @@
     observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
-      characterData: true
+      // [FIX 2] 去掉 characterData: true。
+      // 监听文字变化会把我们自己写入的翻译文本也当作触发源，
+      // 导致 observer → runAll() → 写文字 → observer → … 的循环（虽然 debounce 兜住了，
+      // 但属于不必要的开销）。只监听 childList 足以覆盖 AO3 的动态加载场景。
     });
   }
 
