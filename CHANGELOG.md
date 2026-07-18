@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+- 完善笔名相关页面的中文翻译，包括新建、编辑、默认笔名、头像设置及相关提示信息。Improved Chinese translations across pseud-related pages, including pseud creation and editing, default pseud labels, icon settings, and related notices.
+- 清理遗留代码并优化部分页面专用翻译逻辑。Removed unused legacy code and optimized page-specific translation logic to reduce unnecessary page processing.
+- 修复若干界面翻译问题。Fixed several UI translation issues.
+  
 ## 1.1.0
 
 - 优化提交按钮处理方式：在保留AO3原始提交值的同时显示中文按钮文字，以减少对网站功能的影响。Improved submit button handling: Chinese button labels are now shown while preserving AO3’s original submit values, reducing the risk of affecting site functionality.
