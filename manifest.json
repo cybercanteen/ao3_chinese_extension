@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AO3中文助手",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "汉化AO3常规用户界面，并为章节与备注提供翻译按钮。",
   "host_permissions": [
     "https://archiveofourown.org/*",
