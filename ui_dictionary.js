@@ -93,6 +93,7 @@ window.AO3_UI_DICT = {
 
     // users/pseuds
     "New Pseud": "新建笔名",
+    "Pseuds": "笔名列表",
     "Editing pseud": "编辑笔名",
     "Back To Pseuds": "返回笔名列表",
     "Name (required)": "笔名（必填）",
@@ -516,7 +517,7 @@ window.AO3_UI_DICT = {
     ["By checking this box, you consent to the processing of your personal data in the United States and other jurisdictions in connection with our provision of AO3 and its related services to you. You acknowledge that the data privacy laws of such jurisdictions may differ from those provided in your jurisdiction. For more information about how your personal data will be processed, please refer to our Privacy Policy.", "勾选此框即表示你同意：为了向你提供AO3及其相关服务，我们会在美国及其他司法辖区处理你的个人数据。你确认知悉这些司法辖区的数据隐私法律，可能与你所在司法辖区的法律不同。更多有关我们如何处理你个人数据的信息，请参阅我们的隐私政策。"],
     ["On the Archive of Our Own (AO3), users can create works, bookmarks, comments, tags, and other", "在 Archive of Our Own（AO3）上，用户可以创建作品、书签、评论、标签及其他"],
     ["Any information you publish on AO3 may be accessible by the public, AO3 users, and/or AO3 personnel.", "你在AO3上发布的任何信息，可能会被公众、AO3用户和/或AO3工作人员访问。"],
-    ["Be mindful when sharing personal information, including but not limited to your name, email, age, location, personal relationships, gender or sexual identity, racial or ethnic background, religious or political views, and/or account usernames for other sites.", "分享个人信息时请谨慎，包括但不限于你的姓名、邮箱、年龄、所在地、个人关系、性别或性身份、种族或族裔背景、宗教或政治观点，以及其他网站的账号用户名。"],
+    ["Be mindful when sharing personal information, including but not limited to your name, email, age, location, personal relationships, gender or sexual identity, racial or ethnic background, religious or political views, and/or account usernames for other sites.", "分享个人信息时请谨慎，包括但不限于你的姓名、邮箱、年龄、所在地、个人关系、性别或性向认同、种族或族裔背景、宗教或政治观点，以及其他网站的账号用户名。"],
     ["To learn more, check out our", "如需了解更多，请查看我们的"],
     ["including the", "包括"],
 
