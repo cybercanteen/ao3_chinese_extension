@@ -2,9 +2,9 @@
 window.AO3_UI_DICT = {
   exact: {
     // 顶部 / 全站常规 UI
-    "Archive of Our Own beta": "Archive of Our Own 测试版",
     "My Dashboard": "我的后台",
     "My Works": "我的作品",
+    "My Bookmarks": "我的书签",
     "My Preferences": "我的偏好设置",
     "Post": "发布",
     "New Work": "新作品",
@@ -75,8 +75,8 @@ window.AO3_UI_DICT = {
     "Top": "顶部",
     "Log In": "登录",
     "Log in": "登录",
-    "Username or email:": "用户名或邮箱",
-    "Password:": "密码",
+    "Username or email:": "用户名或邮箱：",
+    "Password:": "密码：",
     "Remember Me": "记住我",
     "Forgot password?": "忘记密码？",
     "Get an Invitation": "获得邀请",
@@ -119,6 +119,10 @@ window.AO3_UI_DICT = {
     "Archive Warning:": "警告：",
     "Category:": "分类：",
     "Fandom:": "原作：",
+    "Fandoms:": "原作：",
+    "Archive Warnings:": "警告：",
+    "Categories:": "分类：",
+    "Collections:": "合集：",
     "Relationship:": "关系：",
     "Relationships:": "关系：",
     "Character:": "角色：",
@@ -140,11 +144,11 @@ window.AO3_UI_DICT = {
     // 固定枚举值
     "General Audiences": "General Audiences（全年龄）",
     "Teen And Up Audiences": "Teen And Up Audiences（13岁以上）",
-    "Mature": "Mature (成人级)",
+    "Mature": "Mature（成人级）",
     "Explicit": "Explicit（限制级）",
     "Not Rated": "Not Rated（未分级）",
     "Tags are comma separated, 150 characters per tag. Fandom, relationship, character, and additional tags must not add up to more than 75. Archive warning, category, and rating tags do not count toward this limit.": "标签用逗号分隔，每个标签最多150个字符。原作、关系、角色及附加标签总数最多75个。归档警告、分类和分级标签不计入该数量限制。",
-    "If this is the first work for a fandom, it may not show up in the fandoms page for a day or two.": "如果这是某个同人的第一部作品，可能要过一两天才会出现在该同人的页面上。",
+    "If this is the first work for a fandom, it may not show up in the fandoms page for a day or two.": "如果这是某个原作的第一部同人作品，可能要过一两天才会出现在该同人的页面上。",
     "Please note: Unposted drafts are only saved for 30 days from the day they are first created, and then deleted from AO3.": "请注意：未发布的草稿仅会从初次创建之日起保存30天，之后将会从AO3删除。",
 
     "Choose Not To Use Archive Warnings": "作者选择不标警告",
@@ -187,7 +191,9 @@ window.AO3_UI_DICT = {
     "Additional Tags": "附加标签",
 
     "Work Title*": "作品标题*",
-    "Add co-creators?": "添加共同作者？",
+    "Creator/Pseud(s)": "作者/笔名",
+    "We need a title! (At least 1 character long, please.)": "需要填写标题！（至少 1 个字符。）",
+    "Add co-creators?": "添加共同创作者？",
     "Summary": "简介",
     "Notes": "备注",
 
@@ -219,7 +225,7 @@ window.AO3_UI_DICT = {
     "Only registered users can comment": "仅注册用户可评论",
     "No one can comment": "禁止评论",
 
-    "Work Text*": "作品正文",
+    "Work Text*": "作品正文*",
     "Note: Text entered in the posting form is not automatically saved. Always keep a backup copy of your work.": "注意：发布表单中的文本不会自动保存，请务必备份作品内容。",
     "Post Work": "发布作品",
 
@@ -231,6 +237,9 @@ window.AO3_UI_DICT = {
     "Search works": "搜索作品",
 
     "Find your favorites": "找到你的最爱",
+    "Unread messages": "未读消息",
+    "The latest unread items from your inbox.": "收件箱中最新的未读内容。",
+
 
     // chapters/new
     "Post New Chapter": "发布新章节",
@@ -276,15 +285,15 @@ window.AO3_UI_DICT = {
     "Backdating help": "回溯发布日期帮助",
     "Html help": "HTML 帮助",
     "Rte help": "富文本编辑帮助",
-    "Add co-creators": "添加共同作者",
+    "Add co-creators": "添加共同创作者",
     "Start typing for suggestions!": "开始输入以查看建议！",
     "(No suggestions found)": "（未找到建议）",
     "Searching...": "搜索中...",
     "Please wait...": "请稍候...",
 
     // users/profile
-    "My pseuds:": "我的笔名",
-    "I joined on:": "注册时间",
+    "My pseuds:": "我的笔名：",
+    "I joined on:": "注册时间：",
     "My user ID is:": "我的用户 ID：",
     "Edit My Works": "编辑我的作品",
     "Delete My Account": "删除我的账号",
@@ -380,6 +389,7 @@ window.AO3_UI_DICT = {
     "Freeze Thread": "冻结对话",
     "Delete": "删除",
     "Block": "屏蔽",
+    "Unblock": "取消屏蔽",
     "Edit": "编辑",
     "Preview Comment": "预览评论",
     "Post Comment": "发布评论",
@@ -404,7 +414,7 @@ window.AO3_UI_DICT = {
     "Series": "系列",
     "Inbox": "收件箱",
     "Statistics": "统计",
-    "History": "阅读历史 ",
+    "History": "阅读历史",
     "Subscriptions": "订阅",
     "Sign-ups": "报名",
     "Assignments": "任务分配",
@@ -499,6 +509,80 @@ window.AO3_UI_DICT = {
     "Turn the new user help banner back on.": "重新开启新用户帮助横幅。",
     "Turn off the banner showing on every page.": "关闭每页显示的横幅。",
 
+    //Blocked Users
+
+    "You can block up to 3,000 users. Blocking a user prevents them from:":
+    "你最多可以屏蔽3,000名用户。屏蔽用户后，对方将无法：",
+
+    "commenting or leaving kudos on your works":
+    "在你的作品下发表评论或点赞",
+
+    "replying to your comments anywhere on the site":
+    "回复你在网站上的任何评论",
+
+    "giving you gift works outside of challenge assignments and claimed prompts":
+    "在挑战任务和已认领的点梗之外向你赠送作品",
+
+    "Blocking a user will not:":
+    "屏蔽用户不会：",
+
+    "hide their works or bookmarks from you":
+    "向你隐藏他们的作品或书签",
+
+    "delete or hide comments they previously left on your works; you can delete these individually":
+    "删除或隐藏他们此前在你作品下发表的评论；你可自行逐条删除这些评论",
+
+    "hide their comments elsewhere on the site":
+    "向你隐藏他们在网站其他地方发表的评论",
+
+    "Muted Users page":
+    "已静音用户页面",
+
+    "Block a user":
+    "屏蔽用户",
+
+    "Yes, Block User": "确认屏蔽",
+    "Yes, Unblock User": "确认解除屏蔽",
+    "You have not blocked any users.": "你尚未屏蔽任何用户。",
+    "Listing Blocked Users": "已屏蔽用户列表",
+   
+
+    //Muted Users
+    "Yes, Mute User": "确认静音", 
+
+    "You can mute up to 3,000 users. Muting a user:":
+    "你最多可以静音 3,000 名用户。静音某位用户后：",
+
+    "completely hides their works, series, bookmarks, and comments from you; there will be no empty space, placeholder text, or other indication something has been removed":
+    "该用户的作品、系列、书签和评论会在你的页面中完全隐藏，不会留下空白、占位提示或其他内容已被移除的迹象。",
+
+    "Muting a user will not:":"静音用户不会：",
+
+    "prevent you from receiving comment or subscription emails from this user":
+    "阻止你收到由该用户的评论或订阅活动触发的邮件通知",
+
+    "hide their works, series, bookmarks, and comments from anyone else":
+    "向其他用户隐藏该用户的作品、系列、书签和评论",
+
+    "Mute a user":"静音该用户",
+
+    "Mute":"静音",
+
+    "You have not muted any users.":
+    "你尚未静音任何用户。",
+
+    "Listing Muted Users":
+    "已静音用户列表",
+
+    "Unmute":
+    "解除静音",
+
+    "Yes, Unmute User":
+    "确认解除静音",
+
+    "see their works, series, bookmarks, and comments on the site":
+    "在网站上查看该用户的作品、系列、书签和评论",
+
     // Common UI / 首次登录 banner / 帮助
     "First login help": "首次登录帮助",
     "useful tips for new users": "新用户实用提示",
@@ -512,14 +596,9 @@ window.AO3_UI_DICT = {
   },
 
   contains: [
-    // TOS / 首次登录协议页：长句必须放在短词条前面，避免被拆成半中半英
-    ["I have read & understood the 2024 Terms of Service, including the Content Policy and Privacy Policy.", "我已阅读并理解2024年服务条款，包括内容政策和隐私政策。"],
-    ["By checking this box, you consent to the processing of your personal data in the United States and other jurisdictions in connection with our provision of AO3 and its related services to you. You acknowledge that the data privacy laws of such jurisdictions may differ from those provided in your jurisdiction. For more information about how your personal data will be processed, please refer to our Privacy Policy.", "勾选此框即表示你同意：为了向你提供AO3及其相关服务，我们会在美国及其他司法辖区处理你的个人数据。你确认知悉这些司法辖区的数据隐私法律，可能与你所在司法辖区的法律不同。更多有关我们如何处理你个人数据的信息，请参阅我们的隐私政策。"],
-    ["On the Archive of Our Own (AO3), users can create works, bookmarks, comments, tags, and other", "在 Archive of Our Own（AO3）上，用户可以创建作品、书签、评论、标签及其他"],
-    ["Any information you publish on AO3 may be accessible by the public, AO3 users, and/or AO3 personnel.", "你在AO3上发布的任何信息，可能会被公众、AO3用户和/或AO3工作人员访问。"],
-    ["Be mindful when sharing personal information, including but not limited to your name, email, age, location, personal relationships, gender or sexual identity, racial or ethnic background, religious or political views, and/or account usernames for other sites.", "分享个人信息时请谨慎，包括但不限于你的姓名、邮箱、年龄、所在地、个人关系、性别或性向认同、种族或族裔背景、宗教或政治观点，以及其他网站的账号用户名。"],
-    ["To learn more, check out our", "如需了解更多，请查看我们的"],
-    ["including the", "包括"],
+    // TOS / 首次登录协议页：确认勾选项
+    ["I have read & understood the 2024 Terms of Service, including the Content Policy and Privacy Policy.", "我已阅读并理解2024年版本的服务条款，包括内容政策和隐私政策。"],
+    ["By checking this box, you consent to the processing of your personal data in the United States and other jurisdictions in connection with our provision of AO3 and its related services to you. You acknowledge that the data privacy laws of such jurisdictions may differ from those provided in your jurisdiction. For more information about how your personal data will be processed, please refer to our Privacy Policy.", "勾选此框即表示你同意：在我们向你提供 AO3 及其相关服务的过程中，我们会在美国及其他司法辖区处理你的个人数据。你确认知悉，这些司法辖区的数据隐私法律可能与你所在司法辖区的数据隐私法律不同。有关我们将如何处理你的个人数据的更多信息，请参阅我们的隐私政策。"],
 
     ["Work Search", "作品搜索"],
     [" characters left", " 字剩余"],
@@ -534,8 +613,6 @@ window.AO3_UI_DICT = {
     ["Next Thread", "下一条对话"],
     ["Parent Thread", "上级对话"],
     ["Chapter Text", "正文"],
-    ["Notes:", "作者备注："],
-    ["Summary:", "简介："],
     ["Recent works", "最近作品"],
     ["Recent Works", "最近作品"],
     ["Add Chapter", "添加章节"],
@@ -556,12 +633,8 @@ window.AO3_UI_DICT = {
     ["useful tips for new users", "新用户实用提示"],
     ["our FAQs", "常见问题"],
     ["contact our Support team", "联系技术支持团队"],
-    ["Terms of Service", "服务条款"],
-    ["Content Policy", "内容政策"],
-    ["Privacy Policy", "隐私政策"],
 
     ["A fan-created, fan-run, nonprofit, noncommercial archive for transformative fanworks, like fanfiction, fanart, fan videos, and podfic", "一个由粉丝创建、由粉丝运营的非营利、非商业档案库，专门收录各种同人创作（transformative fanworks），例如同人小说、同人图、同人视频和有声同人（podfic）。"],
-    ["more than", "超过"],
     ["The Archive of Our Own is a project of the Organization for Transformative Works.", "Archive of Our Own 是“Organization for Transformative Works”（OTW）的项目之一。"],
     ["With an AO3 account, you can:", "拥有 AO3 账号后，你可以："],
     ["Share your own fanworks", "发布你自己的同人作品"],
@@ -570,9 +643,8 @@ window.AO3_UI_DICT = {
     ["Keep track of works you've visited and works you want to check out later", "记录你浏览过的、以及想稍后阅读的作品"],
     ["You can join by getting an invitation from our automated invite queue.", "你可以通过提交邮箱加入邀请队列，排队获取邀请链接注册账号。"],
     ["All fans and fanworks are welcome!", "所有粉丝与同人作品都欢迎加入！"],
-    ["To get a free Archive of Our Own account, you need an Invitation. By submitting your email address to our invitation queue, you confirm that you are at least 13 years old, and if you're in a country whose residents/citizens have to be of an age older than 13 to consent, you are old enough to consent to the processing of your personal data without our obtaining written permission from a parent or legal guardian. We will use the email address you submit only to send you an Invitation and to process/manage your account activation. Please don't request an Invitation unless you've read our", "要获得一个免费的 Archive of Our Own（AO3）账号，你需要一封邀请邮件。通过将你的电子邮箱地址提交到我们的邀请队列，即表示你确认自己至少已满13岁；如果你所在国家或地区规定居民/公民必须年满13岁以上才能同意相关事项，则表示你已达到可以在无需父母或法定监护人书面许可的情况下，同意我们处理你的个人数据的年龄。我们只会将你提交的电子邮箱地址用于向你发送邀请以及处理和管理你的账号激活。在申请邀请之前，请先阅读我们的"],
-    ["contact our Policy & Abuse team", "联系政策与滥用处理团队"]
-  ],
+    ["contact our Policy & Abuse team", "联系我们的政策与滥用(Policy & Abuse)处理团队"]
+      ],
 
   placeholders: {
     "work_search[query]": "搜索作品",

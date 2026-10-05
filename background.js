@@ -28,7 +28,12 @@ async function translateWithGoogle(text, sourceLang = "auto", targetLang = "zh-C
   // [新增] 超长文本保护：Google 非官方接口通过 URL 传参，单次请求上限约 5000 字符。
   // 超过时直接返回空字符串，而不是发出注定失败的请求。
   const MAX_TEXT_LEN = 4500;
-  if (!text || text.length > MAX_TEXT_LEN) return "";
+  if (!text) return "";
+  // [修改] 原来超长时静默返回 ""，调用方会把它显示成「无翻译结果」，
+  // 看不出真正原因。改为抛出明确的错误，错误信息会显示在译文框里。
+  if (text.length > MAX_TEXT_LEN) {
+    throw new Error(`文本过长（${text.length} 字，上限 ${MAX_TEXT_LEN}）`);
+  }
 
   const key = `${sourceLang}|${targetLang}|${text}`;
   const hit = cacheGet(key);
@@ -37,10 +42,13 @@ async function translateWithGoogle(text, sourceLang = "auto", targetLang = "zh-C
   if (hit !== undefined) return hit;
 
   // [新增] 速率限制：距离上次请求不足 RATE_LIMIT_MS 时等待差值
-  const now = Date.now();
-  const waitMs = RATE_LIMIT_MS - (now - lastFetchAt);
+  // [修改] 原来是「先算等待时间、await 之后再写 lastFetchAt」，
+  // 并发的两个请求会算出同样的等待时间然后同时发出。
+  // 改为同步地先占好自己的时间槽，再等待。
+  const slot = Math.max(Date.now(), lastFetchAt + RATE_LIMIT_MS);
+  lastFetchAt = slot;
+  const waitMs = slot - Date.now();
   if (waitMs > 0) await new Promise(r => setTimeout(r, waitMs));
-  lastFetchAt = Date.now();
 
   const url = new URL("https://translate.googleapis.com/translate_a/single");
   url.searchParams.set("client", "gtx");
@@ -57,7 +65,9 @@ async function translateWithGoogle(text, sourceLang = "auto", targetLang = "zh-C
     ? data[0].map(part => part?.[0] || "").join("")
     : "";
 
-  cacheSet(key, translated);
+  // [修改] 空结果多半是接口临时异常，不能缓存，
+  // 否则前端「重试」会直接命中缓存的空串，永远翻不出来。
+  if (translated) cacheSet(key, translated);
   return translated;
 }
 

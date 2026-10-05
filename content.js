@@ -7,14 +7,14 @@
   const NOTES_BTN_CLASS = "ao3-translate-notes-btn";
 
   const CONTROL_HINTS = {
-    "Subscribe": "订阅更新",
-    "Unsubscribe": "取消订阅",
+    Subscribe: "订阅更新",
+    Unsubscribe: "取消订阅",
     "Dismiss permanently": "永久关闭",
-    "Invite": "邀请",
+    Invite: "邀请",
     "Post New": "发布新作品",
     "Post New Work": "发布新作品",
     "Edit Works": "编辑作品",
-    "I agree/consent to these Terms": "我同意这些条款"
+    "I agree/consent to these Terms": "我同意这些条款",
   };
 
   function injectStyles() {
@@ -79,6 +79,24 @@
         gap: 6px;
       }
 
+      .ao3-google-translate-controls {
+        margin: 10px 0 20px;
+      }
+
+     .ao3-google-translate-note {
+        margin: 4px 0 0;
+        font-size: 0.9em;
+        color: #666;
+      }
+
+      .ao3-google-policy-translation {
+        border-left: 3px solid #b9b9b9;
+       margin: 6px 0 14px;
+        padding: 6px 10px;
+        background: #f7f7f7;
+        border-radius: 6px;
+        line-height: 1.6;
+      }
       .ao3-zh-file-control button {
         margin: 0;
       }
@@ -95,34 +113,90 @@
     return (text || "").replace(/\s+/g, " ").trim();
   }
 
-  function shouldSkipElement(el) {
-    if (!el) return true;
+  // 用户生成的内容（作品标题、作者名、系列名、自由 tag 等）
+  // 不能被 UI 字典改写，否则 tag「more than friends」会变成「超过 friends」。
+  // 注意：选择器必须只匹配「展示用户内容」的位置，不能匹配发布/编辑表单。
+  // 表单里 dt/dd 也带 .byline、.title 类（Creator/Pseud(s)、Work Title*），
+  // 所以这里限定到标题 h2/h3 和 .heading.byline。
+  const USER_CONTENT_SELECTOR = [
+    "a[rel='author']",
+    ".heading.byline",
+    ".preface h2.title",
+    ".preface h3.title",
+    ".blurb .heading a",
+    "dd.series a[href^='/series/']",
+    "dd.collections a[href^='/collections/']",
+    // 发布表单里的笔名下拉项是用户自己的笔名，不能被字典改写
+    "select[name*='author_attributes'] option"
+  ].join(", ");
 
-    if (
-      el.closest("script, style, textarea, pre, code") ||
-      el.closest(`.${TL_CLASS}`)
-    ) {
-      return true;
-    }
+  // 这些区域里的 tag 是 AO3 固定枚举值（分级/警告/分类/语言），需要继续翻译。
+  const FIXED_TAG_AREA =
+    "dd.rating, dd.warning, dd.category, dd.language, " +
+    "li.warnings, .required-tags";
 
-    // 自动汉化时跳过正文、摘要和备注正文，改为按钮触发翻译。
-    if (
-      el.closest(".chapter .userstuff.module") ||
-      el.closest(".chapter .notes.module blockquote.userstuff") ||
-      el.closest(".summary.module .userstuff") ||
-      el.closest(".notes.module .userstuff") ||
-      el.closest(".end.notes.module blockquote.userstuff") ||
-      el.closest("blockquote.userstuff")
-    ) {
-      return true;
-    }
+  function isUserGeneratedContent(el) {
+    if (el.closest(USER_CONTENT_SELECTOR)) return true;
 
-    return false;
+    const tag = el.closest("a.tag");
+
+    return Boolean(
+      tag && !tag.closest(FIXED_TAG_AREA)
+    );
   }
+
+  function shouldSkipElement(el) {
+  if (!el) return true;
+
+  if (isUserGeneratedContent(el)) return true;
+
+  if (
+    el.closest("script, style, textarea, pre, code") ||
+    el.closest(`.${TL_CLASS}`)
+  ) {
+    return true;
+  }
+
+  // 自动汉化时跳过正文、摘要和备注正文，改为按钮触发翻译。
+  if (
+    el.closest(".chapter .userstuff.module") ||
+    el.closest(".chapter .notes.module blockquote.userstuff") ||
+    el.closest(".summary.module .userstuff") ||
+    el.closest(".notes.module .userstuff") ||
+    el.closest(".end.notes.module blockquote.userstuff") ||
+    el.closest("blockquote.userstuff")
+  ) {
+    return true;
+  }
+
+  // TOS / Content Policy / Privacy Policy 属于政策文本。
+  // 不使用 UI 字典自动改写正文，保持 AO3 英文原文完整。
+  // 中文由用户主动点击 Google 翻译按钮后另行显示。
+  const isPolicyPage =
+    /^\/(?:tos|content|privacy)\/?$/.test(
+      location.pathname
+    );
+
+  if (
+    isPolicyPage &&
+    el.closest("#main")
+  ) {
+    return true;
+  }
+
+  return false;
+}
 
   // 安全替换元素文字：
   // 没有子元素时直接修改 textContent；
   // 有子元素时只替换第一个非空的直接文本节点。
+  // 只含这些「纯视觉格式」标签的元素，才可以整体替换为译文（会丢失加粗等格式）。
+  // 刻意不含 SPAN（常带 class/data-/aria- 或是脚本更新的目标，如计数器）
+  // 和 BR（整体替换会丢掉换行结构）。拿不准时宁可保持英文，也不破坏 DOM。
+  const INLINE_FORMAT_TAGS = new Set([
+    "STRONG", "B", "EM", "I", "U", "SMALL", "SUB", "SUP"
+  ]);
+
   function safeSetText(el, newText) {
     if (!el) return;
 
@@ -131,23 +205,52 @@
       return;
     }
 
+    // 有子元素时，newText 是整个 textContent 的译文，
+    // 不能整段塞进第一个文本节点（会造成文字重复/错乱）。
+    // 先尝试逐个直接文本节点翻译。
+    let changed = false;
+
     for (const node of el.childNodes) {
       if (
         node.nodeType === Node.TEXT_NODE &&
         node.nodeValue.trim()
       ) {
-        const leading =
-          node.nodeValue.match(/^\s*/)?.[0] ?? "";
+        const translated =
+          translateTextValue(node.nodeValue);
 
-        const trailing =
-          node.nodeValue.match(/\s*$/)?.[0] ?? "";
-
-        node.nodeValue =
-          `${leading}${newText}${trailing}`;
-
-        return;
+        if (translated !== node.nodeValue) {
+          node.nodeValue = translated;
+          changed = true;
+        }
       }
     }
+
+    if (changed) return;
+
+    // 逐节点一个都没匹配上：说明词条是一整句话，被 <strong> 等拆成了多个文本节点
+    // （如 "Note: ... <strong>not</strong> automatically saved"）。
+    // 子元素都只是行内格式时，直接用整句译文替换；
+    // 含链接/输入框等其它元素时保持原样，避免破坏功能。
+    const onlyFormatting = [
+      ...el.querySelectorAll("*")
+    ].every(n => INLINE_FORMAT_TAGS.has(n.tagName));
+
+    if (onlyFormatting && newText && newText.trim()) {
+      el.textContent = newText;
+    }
+  }
+
+  // 用函数形式替换，避免译文里的 $&、$$ 被当成替换模式；
+  // 原文含多余空白导致 clean 找不到时，整体替换并保留首尾空白。
+  function replaceOnce(text, clean, out) {
+    if (text.includes(clean)) {
+      return text.replace(clean, () => out);
+    }
+
+    const lead = text.match(/^\s*/)[0];
+    const trail = text.match(/\s*$/)[0];
+
+    return lead + out + trail;
   }
 
   function translateExact(text) {
@@ -155,8 +258,8 @@
 
     if (!clean) return text;
 
-    if (DICT.exact[clean]) {
-      return text.replace(
+    if (Object.prototype.hasOwnProperty.call(DICT.exact, clean)) {
+      return replaceOnce(text, 
         clean,
         DICT.exact[clean]
       );
@@ -167,9 +270,25 @@
       clean.match(/^Hi,\s*(.+?)!$/);
 
     if (hiMatch) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         `${hiMatch[1]}，你好！`
+      );
+    }
+
+    // Block username
+    const blockUserHeadingMatch =
+      clean.match(/^Block\s+(.+)$/i);
+
+    if (
+      blockUserHeadingMatch &&
+      !/^a user$/i.test(
+        blockUserHeadingMatch[1]
+      )
+    ) {
+      return replaceOnce(text, 
+        clean,
+        `屏蔽 ${blockUserHeadingMatch[1]}`
       );
     }
 
@@ -190,14 +309,14 @@
         assignments: "任务分配",
         claims: "认领",
         "related works": "相关作品",
-        gifts: "赠礼"
+        gifts: "赠礼",
       };
 
       const key =
         dashboardCountMatch[1].toLowerCase();
 
       if (map[key]) {
-        return text.replace(
+        return replaceOnce(text, 
           clean,
           `${map[key]}（${dashboardCountMatch[2]}）`
         );
@@ -208,7 +327,7 @@
       clean.match(/^Comments\s*\((\d+)\)$/i);
 
     if (commentsMatch) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         `评论（${commentsMatch[1]}）`
       );
@@ -218,14 +337,14 @@
       clean.match(/^Hide Comments\s*\((\d+)\)$/i);
 
     if (hideCommentsMatch) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         `隐藏评论（${hideCommentsMatch[1]}）`
       );
     }
 
     if (/^Hide Comments$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "隐藏评论"
       );
@@ -235,42 +354,42 @@
       clean.match(/^Show Comments\s*\((\d+)\)$/i);
 
     if (showCommentsMatch) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         `显示评论（${showCommentsMatch[1]}）`
       );
     }
 
     if (/^Show Comments$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "显示评论"
       );
     }
 
     if (/^←\s*Previous Chapter$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "← 上一章"
       );
     }
 
     if (/^Next Chapter\s*→$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "下一章 →"
       );
     }
 
     if (/^Previous Chapter$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "上一章"
       );
     }
 
     if (/^Next Chapter$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "下一章"
       );
@@ -280,7 +399,7 @@
       clean.match(/^Part\s+(\d+)\s+of\s+(.+)$/i);
 
     if (partMatch) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         `第 ${partMatch[1]} 部分，属于 ${partMatch[2]}`
       );
@@ -290,35 +409,35 @@
       clean.match(/^(\d+)\s+characters left$/i);
 
     if (charsLeftMatch) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         `${charsLeftMatch[1]} 字剩余`
       );
     }
 
     if (/^of$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "共"
       );
     }
 
     if (/^Save Draft$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "保存草稿"
       );
     }
 
     if (/^Post New Chapter$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "发布新章节"
       );
     }
 
     if (/^Type or paste formatted text\.$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "输入或粘贴已格式化文本。"
       );
@@ -327,7 +446,7 @@
     if (
       /^All works you post on AO3 must comply with our$/i.test(clean)
     ) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "你在 AO3 发布的所有作品都必须遵守我们的"
       );
@@ -336,21 +455,21 @@
     if (
       /^For more information, please refer to our$/i.test(clean)
     ) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "更多信息请参阅我们的"
       );
     }
 
     if (/^Post Chapter$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "发布章节"
       );
     }
 
     if (/^Please wait\.\.\.$/.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "请稍候..."
       );
@@ -359,7 +478,7 @@
     if (
       /^Warning: Unchecking this box will delete the existing beginning note\.$/.test(clean)
     ) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "警告：取消勾选后，将删除现有的开头备注。"
       );
@@ -368,280 +487,259 @@
     if (
       /^Warning: Unchecking this box will delete the existing end note\.$/.test(clean)
     ) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "警告：取消勾选后，将删除现有的结尾备注。"
       );
     }
 
     if (/^Search Works$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "作品搜索"
       );
     }
 
     if (/^People Search$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "用户搜索"
       );
     }
 
     if (/^Bookmark Search$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "书签搜索"
       );
     }
 
     if (/^Tag Search$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "标签搜索"
       );
     }
 
     if (/^Work Info$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "作品信息"
       );
     }
 
     if (/^Any Field$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "任意字段"
       );
     }
 
     if (/^Completion status$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "完结状态"
       );
     }
 
     if (/^All works$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "所有作品"
       );
     }
 
     if (/^Complete works only$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "仅已完结作品"
       );
     }
 
     if (/^Works in progress only$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "仅连载中作品"
       );
     }
 
     if (/^Crossovers$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "跨作品"
       );
     }
 
     if (/^Include crossovers$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "包含跨作品"
       );
     }
 
     if (/^Exclude crossovers$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "排除跨作品"
       );
     }
 
     if (/^Only crossovers$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "仅跨作品"
       );
     }
 
     if (/^Single Chapter$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "单章节"
       );
     }
 
     if (/^Word Count$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "字数"
       );
     }
 
     if (/^Language$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "语言"
       );
     }
 
     if (/^Work Tags$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "作品标签"
       );
     }
 
     if (/^Rating$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "分级"
       );
     }
 
     if (/^Warnings$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "警告"
       );
     }
 
     if (/^Category$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "作品类型"
       );
     }
 
     if (/^Fandoms$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "原作"
       );
     }
 
     if (/^Relationships$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "关系"
       );
     }
 
     if (/^Characters$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "角色"
       );
     }
 
     if (/^Additional Tags$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "附加标签"
       );
     }
 
     if (/^Search within results$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "在结果中搜索"
       );
     }
 
     if (/^Sort by$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "排序方式"
       );
     }
 
     if (/^Gen$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "Gen（无CP）"
       );
     }
 
     if (/^F\/M$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "F/M（男女）"
       );
     }
 
     if (/^M\/M$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "M/M（男男）"
       );
     }
 
     if (/^F\/F$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "F/F（女女）"
       );
     }
 
     if (/^Multi$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "Multi（多配对）"
       );
     }
 
     if (/^Other$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "Other（其他）"
       );
     }
 
-    if (/^Subscriptions$/i.test(clean)) {
-      return text.replace(
-        clean,
-        "订阅更新"
-      );
-    }
-
     if (/^Author Subscriptions$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
-        "作者更新"
-      );
-    }
-
-    if (/^Work Subscriptions$/i.test(clean)) {
-      return text.replace(
-        clean,
-        "作品更新"
-      );
-    }
-
-    if (/^Series Subscriptions$/i.test(clean)) {
-      return text.replace(
-        clean,
-        "系列更新"
+        "作者订阅"
       );
     }
 
     if (/^Subscribe$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "订阅更新"
       );
     }
 
     if (/^Unsubscribe$/i.test(clean)) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         "取消订阅"
       );
@@ -651,7 +749,7 @@
       clean.match(/^Unsubscribe from\s+(.+)$/i);
 
     if (unsubFromMatch) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         `取消对 ${unsubFromMatch[1]} 的订阅`
       );
@@ -661,7 +759,7 @@
       clean.match(/^Subscribe to\s+(.+)$/i);
 
     if (subToMatch) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         `订阅 ${subToMatch[1]} 的更新`
       );
@@ -671,7 +769,7 @@
       translateFlashTemplate(clean);
 
     if (flashTranslated !== clean) {
-      return text.replace(
+      return replaceOnce(text, 
         clean,
         flashTranslated
       );
@@ -712,6 +810,22 @@
       [
         /^You have successfully unsubscribed from (.+)\.$/i,
         "你已成功取消订阅 $1。"
+      ],
+      [
+        /^You have blocked the user (.+)\.$/i,
+        "你已屏蔽用户 $1。"
+      ],
+      [
+        /^You have muted the user (.+)\.$/i,
+        "你已静音用户 $1。"
+      ],
+      [
+        /^You have unmuted the user (.+)\.$/i,
+        "你已解除对用户 $1 的静音。"
+      ],
+      [
+        /^You have unblocked the user (.+)\.$/i,
+        "你已解除对用户 $1 的屏蔽。"
       ],
       [
         /^You are now subscribed to (.+)\.$/i,
@@ -1104,15 +1218,15 @@
           el,
           translated
         );
-      }
 
-      el.setAttribute(
-        MARK,
-        "1"
-      );
+        el.setAttribute(
+          MARK,
+          "1"
+        );
+      }
     });
   }
-
+  
   function translateTextNodes(root = document.body) {
     const walker = document.createTreeWalker(
       root,
@@ -1168,7 +1282,8 @@
 
     fields.forEach(el => {
       if (el.hasAttribute(MARK)) return;
-      if (shouldSkipElement(el)) return;
+      // textarea 的正文不翻译，但 placeholder 需要处理。
+      if (shouldSkipElement(el) && !(el instanceof HTMLTextAreaElement)) return;
 
       if (isHintOnlyControl(el)) {
         upsertControlHint(el);
@@ -1838,6 +1953,9 @@
       ).forEach(el => {
         if (el.hasAttribute(MARK)) return;
 
+        // 评论正文（blockquote.userstuff）和用户名不能被改写。
+        if (shouldSkipElement(el) && !(el instanceof HTMLTextAreaElement)) return;
+
         if (
           el.closest(`.${TL_CLASS}`)
         ) {
@@ -1952,6 +2070,8 @@
       ".comment button, " +
       ".thread button"
     ).forEach(el => {
+      if (shouldSkipElement(el)) return;
+
       if (isHintOnlyControl(el)) {
         upsertControlHint(el);
         return;
@@ -1978,6 +2098,925 @@
           "1"
         );
       }
+    });
+  }
+
+  // 处理首次服务条款确认页中包含多个链接的说明文字。
+  function translateTosPromptAgreementNotice() {
+    const agreement =
+      document.querySelector(
+        "#tos_prompt .agreement"
+      );
+
+    if (!agreement) return;
+
+    agreement.querySelectorAll(
+      ":scope > p"
+   ).forEach(container => {
+      const links =
+       Array.from(
+          container.querySelectorAll("a")
+        );
+
+      // 第一段：
+      // ...and other Content.
+      const contentDefinitionLink =
+        links.find(link => {
+         try {
+           const url = new URL(
+              link.getAttribute("href") || "",
+              location.origin
+            );
+
+            return (
+              url.pathname === "/tos_faq" &&
+              url.hash === "#define_content"
+            );
+          } catch (_) {
+            return false;
+          }
+        });
+
+      if (contentDefinitionLink) {
+        // 原文措辞变了（或已翻译过）就不要用写死的译文覆盖
+        if (
+          !/^On the Archive of Our Own/.test(
+            normalizeText(container.textContent)
+          )
+        ) {
+          return;
+        }
+
+        contentDefinitionLink.textContent =
+         "内容";
+
+        contentDefinitionLink.setAttribute(
+         MARK,
+          "1"
+        );
+
+        container.textContent = "";
+
+        container.appendChild(
+          document.createTextNode(
+           "在 Archive of Our Own（AO3）上，用户可以创建作品、书签、评论、标签及其他"
+          )
+        );
+
+        container.appendChild(
+         contentDefinitionLink
+        );
+
+        container.appendChild(
+         document.createTextNode(
+            "。你在 AO3 上发布的任何信息，可能会被公众、AO3 用户和/或 AO3 工作人员访问。" +
+            "分享个人信息时请谨慎，包括但不限于你的姓名、邮箱、年龄、所在地、个人关系、" +
+           "性别或性向认同、种族或族裔背景、宗教或政治观点，以及其他网站的账号用户名。"
+         )
+        );
+
+        container.setAttribute(
+         MARK,
+         "1"
+        );
+
+       return;
+      }
+
+      // 第二段：
+      // To learn more, check out our Terms of Service,
+      // including the Content Policy and Privacy Policy.
+      const tosLink =
+       links.find(link => {
+         try {
+           return (
+              new URL(
+                link.getAttribute("href") || "",
+                location.origin
+              ).pathname === "/tos"
+           );
+         } catch (_) {
+           return false;
+         }
+       });
+
+      const contentPolicyLink =
+       links.find(link => {
+          try {
+           return (
+             new URL(
+               link.getAttribute("href") || "",
+               location.origin
+             ).pathname === "/content"
+           );
+         } catch (_) {
+           return false;
+         }
+        });
+
+      const privacyLink =
+       links.find(link => {
+         try {
+           return (
+              new URL(
+               link.getAttribute("href") || "",
+               location.origin
+              ).pathname === "/privacy"
+           );
+         } catch (_) {
+            return false;
+         }
+        });
+
+      if (
+       !tosLink ||
+       !contentPolicyLink ||
+       !privacyLink ||
+       !/^To learn more, check out our/.test(
+         normalizeText(container.textContent)
+       )
+     ) {
+        return;
+     }
+
+      tosLink.textContent =
+       "服务条款";
+
+      contentPolicyLink.textContent =
+       "内容政策";
+
+      privacyLink.textContent =
+       "隐私政策";
+
+      [
+        tosLink,
+        contentPolicyLink,
+        privacyLink
+      ].forEach(link => {
+        link.setAttribute(
+         MARK,
+         "1"
+        );
+      });
+
+      container.textContent = "";
+
+      container.appendChild(
+        document.createTextNode(
+          "如需了解更多，请查看我们的"
+        )
+     );
+
+      container.appendChild(
+       tosLink
+      );
+
+      container.appendChild(
+        document.createTextNode(
+          "，包括"
+        )
+      );
+
+      container.appendChild(
+        contentPolicyLink
+      );
+
+      container.appendChild(
+        document.createTextNode(
+          "和"
+        )
+      );
+
+      container.appendChild(
+        privacyLink
+      );
+
+      container.appendChild(
+        document.createTextNode(
+          "。"
+        )
+      );
+
+      container.setAttribute(
+       MARK,
+       "1"
+      );
+    });
+  }
+
+  // 处理邀请申请页面顶部包含多个链接的说明文字。
+  function translateInviteRequestIntroNotice() {
+    if (
+      !/^\/invite_requests\/?$/.test(
+        location.pathname
+      )
+    ) {
+      return;
+    }
+
+    const main = document.querySelector(
+      "#main.invite_requests-index"
+    );
+
+    if (!main) return;
+  
+    main.querySelectorAll(
+      ":scope > p"
+    ).forEach(container => {
+      const links =
+        Array.from(
+          container.querySelectorAll("a")
+        );
+
+     const tosLink =
+        links.find(link => {
+          try {
+            return (
+              new URL(
+                link.getAttribute("href") || "",
+                location.origin
+              ).pathname === "/tos"
+            );
+          } catch (_) {
+            return false;
+          }
+        });
+
+      const contentPolicyLink =
+        links.find(link => {
+          try {
+            return (
+              new URL(
+                link.getAttribute("href") || "",
+                location.origin
+              ).pathname === "/content"
+            );
+          } catch (_) {
+            return false;
+          }
+        });
+
+      const privacyLink =
+        links.find(link => {
+          try {
+            return (
+              new URL(
+                link.getAttribute("href") || "",
+                location.origin
+              ).pathname === "/privacy"
+            );
+          } catch (_) {
+            return false;
+          }
+        });
+
+      // 只有同时包含这三个链接的说明段落才处理。
+      if (
+        !tosLink ||
+        !contentPolicyLink ||
+        !privacyLink
+     ) {
+        return;
+      }
+
+      const fullText =
+        normalizeText(
+          container.textContent || ""
+        );
+
+      // 同时兼容原始英文状态和已经被通用词典部分汉化的状态。
+      if (
+        !/To get a free Archive of Our Own/i.test(fullText) &&
+        !/要获得一个免费的 Archive of Our Own/i.test(fullText)
+      ) {
+        return;
+      }
+
+      tosLink.textContent =
+        "服务条款";
+
+      contentPolicyLink.textContent =
+        "内容政策";
+
+      privacyLink.textContent =
+        "隐私政策";
+
+      tosLink.setAttribute(
+        MARK,
+        "1"
+      );
+
+      contentPolicyLink.setAttribute(
+        MARK,
+        "1"
+      );
+
+      privacyLink.setAttribute(
+        MARK,
+        "1"
+      );
+
+      container.textContent = "";
+
+      container.appendChild(
+        document.createTextNode(
+          "要获得一个免费的 Archive of Our Own（AO3）账号，你需要一封邀请邮件。" +
+          "将你的电子邮箱地址提交到我们的邀请申请队列，即表示你确认自己至少已满13岁；" +
+          "如果你所在国家或地区规定居民或公民必须年满13岁以上，才能自行同意个人数据的处理，" +
+          "则表示你同时确认自己已达到可以在无需父母或法定监护人的书面许可的情况下，" +
+          "同意我们处理你的个人数据的年龄。" +
+          "我们只会将你提交的电子邮箱地址用于向你发送邀请，以及处理和管理你的账号激活。" +
+          "在申请邀请之前，请先阅读我们的"
+        )
+      );
+
+      container.appendChild(
+        tosLink
+      );
+
+      container.appendChild(
+        document.createTextNode(
+          "，包括"
+        )
+      );
+
+      container.appendChild(
+        contentPolicyLink
+      );
+
+      container.appendChild(
+        document.createTextNode(
+          "和"
+        )
+      );
+
+      container.appendChild(
+        privacyLink
+      );
+
+      container.appendChild(
+        document.createTextNode(
+          "，并同意遵守这些条款。"
+        )
+      );
+
+      container.setAttribute(
+        MARK,
+        "1"
+      );
+    });
+  }
+
+  // 处理屏蔽用户页面中指向“已静音用户”页面的提示和确认提示。
+  function translateBlockedUsersNotice() {
+    if (
+      !/^\/users\/[^/]+\/blocked\/users(?:\/confirm_block)?\/?$/.test(
+        location.pathname
+      )
+    ) {
+      return;
+    }
+
+    document.querySelectorAll(
+      "#main .notice p"
+    ).forEach(container => {
+      const fullText =
+        normalizeText(
+          container.textContent || ""
+        );
+
+      // 处理确认屏蔽提示。
+      // 原文中的 block 被 strong 元素包裹，因此重建整个段落。
+      const confirmBlockMatch =
+        fullText.match(
+          /^Are you sure you want to block (.+?)\? Blocking a user prevents them from:$/i
+        );
+
+      if (confirmBlockMatch) {
+        const username =
+          confirmBlockMatch[1];
+
+        container.textContent =
+          `你确定要屏蔽 ${username} 吗？屏蔽用户后，对方将无法：`;
+
+        container.setAttribute(
+          MARK,
+          "1"
+        );
+
+        return;
+      }
+
+      // 处理指向“已静音用户”页面的提示。
+      const mutedUsersLink = Array
+        .from(
+          container.querySelectorAll("a")
+        )
+        .find(link => {
+          try {
+            const path = new URL(
+              link.getAttribute("href") || "",
+              location.origin
+            ).pathname;
+
+            return (
+              /^\/users\/[^/]+\/muted\/users\/?$/.test(
+                path
+              )
+            );
+          } catch (_) {
+            return false;
+          }
+        });
+
+      if (!mutedUsersLink) return;
+
+      if (
+        !/^To hide a user['’]s works, bookmarks, series, and comments from you, visit your Muted Users page\.$/i.test(
+          fullText
+        )
+      ) {
+        return;
+      }
+
+      mutedUsersLink.textContent =
+        "已静音用户页面";
+
+      mutedUsersLink.setAttribute(
+        MARK,
+        "1"
+      );
+
+      container.textContent = "";
+
+      container.appendChild(
+        document.createTextNode(
+          "如果需要隐藏某位用户的作品、书签、系列和评论，请前往你的"
+        )
+      );
+
+      container.appendChild(
+        mutedUsersLink
+      );
+
+      container.appendChild(
+        document.createTextNode("。")
+      );
+
+      container.setAttribute(
+        MARK,
+        "1"
+      );
+    });
+  }
+
+  // 处理确认解除屏蔽用户页面。
+  function translateUnblockUserNotice() {
+    const main = document.querySelector(
+      "#main.users-confirm_unblock"
+    );
+
+    if (!main) return;
+
+    // 翻译动态标题：
+    // Unblock 用户名
+    const heading =
+      main.querySelector("h2.heading");
+
+    if (heading) {
+      const headingText =
+        normalizeText(
+          heading.textContent || ""
+        );
+
+      const headingMatch =
+        headingText.match(
+          /^Unblock\s+(.+)$/i
+        );
+
+      if (headingMatch) {
+        heading.textContent =
+          `解除屏蔽 ${headingMatch[1]}`;
+
+        heading.setAttribute(
+          MARK,
+          "1"
+        );
+      }
+    }
+
+    // 翻译确认提示。
+    // 原文中的 unblock 被 strong 元素包裹，
+    // 因此需要读取完整 textContent 后重建段落。
+    main.querySelectorAll(
+      ".notice p"
+    ).forEach(container => {
+      const fullText =
+        normalizeText(
+          container.textContent || ""
+        );
+
+      const confirmMatch =
+        fullText.match(
+          /^Are you sure you want to unblock (.+?)\? Unblocking a user allows them to resume:$/i
+        );
+
+      if (!confirmMatch) return;
+
+      const username =
+        confirmMatch[1];
+
+      container.textContent =
+        `你确定要解除对 ${username} 的屏蔽吗？解除屏蔽后，对方即可恢复以下操作：`;
+
+      container.setAttribute(
+        MARK,
+        "1"
+      );
+    });
+  }
+
+  // 处理确认静音用户页面。
+  function translateMuteUserNotice() {
+    const main = document.querySelector(
+      "#main.users-confirm_mute"
+    );
+
+    if (!main) return;
+
+    // 翻译动态标题：
+    // Mute 用户名
+    const heading =
+      main.querySelector("h2.heading");
+
+    if (heading) {
+      const headingText =
+        normalizeText(
+          heading.textContent || ""
+        );
+
+      const headingMatch =
+        headingText.match(
+          /^Mute\s+(.+)$/i
+        );
+
+      if (headingMatch) {
+        heading.textContent =
+          `静音 ${headingMatch[1]}`;
+
+        heading.setAttribute(
+          MARK,
+          "1"
+        );
+      }
+    }
+
+    // 翻译确认提示。
+    // 原文中的 mute 被 strong 元素包裹，
+    // 因此读取完整 textContent 后重建段落。
+    main.querySelectorAll(
+      ".notice p"
+    ).forEach(container => {
+      const fullText =
+        normalizeText(
+          container.textContent || ""
+        );
+
+      const confirmMatch =
+        fullText.match(
+          /^Are you sure you want to mute (.+?)\? Muting a user:$/i
+        );
+
+      if (!confirmMatch) return;
+
+      const username =
+        confirmMatch[1];
+
+      container.textContent =
+        `你确定要静音 ${username} 吗？静音该用户后：`;
+
+      container.setAttribute(
+        MARK,
+        "1"
+      );
+    });
+  }
+
+  // 处理确认解除静音用户页面。
+  function translateUnmuteUserNotice() {
+    const main = document.querySelector(
+      "#main.users-confirm_unmute"
+    );
+
+    if (!main) return;
+
+    // 翻译动态标题：
+    // Unmute 用户名
+    const heading =
+      main.querySelector("h2.heading");
+
+    if (heading) {
+      const headingText =
+        normalizeText(
+          heading.textContent || ""
+        );
+
+      const headingMatch =
+        headingText.match(
+          /^Unmute\s+(.+)$/i
+        );
+
+      if (headingMatch) {
+        heading.textContent =
+          `解除静音 ${headingMatch[1]}`;
+
+        heading.setAttribute(
+          MARK,
+          "1"
+        );
+      }
+    }
+
+    // 翻译确认提示。
+    // 原文中的 unmute 被 strong 元素包裹，
+    // 因此读取完整 textContent 后重建段落。
+    main.querySelectorAll(
+      ".notice p"
+    ).forEach(container => {
+      const fullText =
+        normalizeText(
+          container.textContent || ""
+        );
+
+      const confirmMatch =
+        fullText.match(
+          /^Are you sure you want to unmute (.+?)\? Unmuting a user allows you to:$/i
+        );
+
+      if (!confirmMatch) return;
+
+      const username =
+        confirmMatch[1];
+
+      container.textContent =
+        `你确定要解除对 ${username} 的静音吗？解除静音后，你将可以：`;
+
+      container.setAttribute(
+        MARK,
+        "1"
+      );
+    });
+  }
+
+   // 处理静音用户列表页和确认静音页中包含链接的说明文字。
+  function translateMutedUsersNotice() {
+    const main = document.querySelector(
+      "#main"
+    );
+
+    if (!main) return;
+
+    const isMutedUsersIndex =
+      /^\/users\/[^/]+\/muted\/users\/?$/.test(
+        location.pathname
+      );
+
+    const isConfirmMute =
+      main.classList.contains(
+        "users-confirm_mute"
+      );
+
+    if (
+      !isMutedUsersIndex &&
+      !isConfirmMute
+    ) {
+      return;
+    }
+
+    main.querySelectorAll(
+      ".notice p"
+    ).forEach(container => {
+      const fullText =
+        normalizeText(
+          container.textContent || ""
+        );
+
+      // 处理指向“已屏蔽用户”页面的提示。
+      const blockedUsersLink = Array
+        .from(
+          container.querySelectorAll("a")
+        )
+        .find(link => {
+          try {
+            const url = new URL(
+              link.getAttribute("href") || "",
+              location.origin
+            );
+
+            return (
+              /^\/users\/[^/]+\/blocked\/users\/?$/.test(
+                url.pathname
+              )
+            );
+          } catch (_) {
+            return false;
+          }
+        });
+
+      if (
+        blockedUsersLink &&
+        /^To prevent a user from commenting on your works or replying to your comments elsewhere on the site, visit your Blocked Users page\.$/i.test(
+          fullText
+        )
+      ) {
+        blockedUsersLink.textContent =
+          "已屏蔽用户页面";
+
+        blockedUsersLink.setAttribute(
+          MARK,
+          "1"
+        );
+
+        container.textContent = "";
+
+        container.appendChild(
+          document.createTextNode(
+            "若要阻止某位用户在你的作品下发表评论，或在网站其他位置回复你的评论，请前往你的"
+          )
+        );
+
+        container.appendChild(
+          blockedUsersLink
+        );
+
+        container.appendChild(
+          document.createTextNode("。")
+        );
+
+        container.setAttribute(
+          MARK,
+          "1"
+        );
+
+        return;
+      }
+
+      // 处理指向“恢复默认站点皮肤”说明的提示。
+      const siteSkinFaqLink = Array
+        .from(
+          container.querySelectorAll("a")
+        )
+        .find(link => {
+          try {
+            const url = new URL(
+              link.getAttribute("href") || "",
+              location.origin
+            );
+
+            return (
+              /^\/faq\/skins-and-archive-interface\/?$/.test(
+                url.pathname
+              ) &&
+              url.hash ===
+                "#restoresiteskin"
+            );
+          } catch (_) {
+            return false;
+          }
+        });
+
+      if (
+        siteSkinFaqLink &&
+        /^Please note that if you are not using the default site skin, muting may not work properly\. The Skins and Archive Interface FAQ has instructions for reverting to the default site skin\.$/i.test(
+          fullText
+        )
+      ) {
+        siteSkinFaqLink.textContent =
+          "恢复默认站点皮肤的操作说明";
+
+        // 明确链接到简体中文 FAQ。
+        siteSkinFaqLink.setAttribute(
+          "href",
+          "/faq/skins-and-archive-interface?language_id=zh-Hans#restoresiteskin"
+        );
+
+        siteSkinFaqLink.setAttribute(
+          MARK,
+          "1"
+        );
+
+        container.textContent = "";
+  
+        container.appendChild(
+          document.createTextNode(
+            "请注意，如果你使用的不是默认站点皮肤，静音功能可能无法正常生效。" +
+            "常见问题（FAQ）的“AO3 界面”栏目提供了"
+          )
+        );
+
+       container.appendChild(
+          siteSkinFaqLink
+        );
+
+        container.appendChild(
+          document.createTextNode("。")
+        );
+
+        container.setAttribute(
+          MARK,
+          "1"
+        );
+      }
+    });
+  }
+
+  // 处理邀请申请页面中的等待名单状态提示。
+  function translateInviteRequestStatusNotice() {
+    if (
+      !/^\/invite_requests\/?$/.test(
+        location.pathname
+      )
+    ) {
+      return;
+    }
+
+    document.querySelectorAll(
+      "#main.invite_requests-index p"
+    ).forEach(container => {
+      const fullText =
+        normalizeText(
+          container.textContent || ""
+        );
+
+      const statusLink = Array
+        .from(
+          container.querySelectorAll("a")
+        )
+        .find(link => {
+          try {
+            const url = new URL(
+              link.getAttribute("href") || "",
+              location.origin
+            );
+
+            return (
+              /^\/invite_requests\/status\/?$/.test(
+                url.pathname
+              )
+            );
+          } catch (_) {
+            return false;
+          }
+        });
+
+      if (!statusLink) return;
+
+      const match =
+        fullText.match(
+          /^If you have already requested an invitation, you can check your position on the waiting list\. There are currently ([\d,]+) people on the waiting list\. We are sending out ([\d,]+) invitations every ([\d.]+) hours\.$/i
+        );
+
+      if (!match) return;
+
+      const waitingCount =
+        match[1];
+
+      const invitationCount =
+        match[2];
+
+      const hours =
+        match[3];
+
+      statusLink.textContent =
+        "查看你在等待名单中的位置";
+
+      statusLink.setAttribute(
+        MARK,
+        "1"
+      );
+
+      container.textContent = "";
+
+      container.appendChild(
+        document.createTextNode(
+          "如果你已经申请过邀请，可以"
+        )
+      );
+
+      container.appendChild(
+        statusLink
+      );
+
+      container.appendChild(
+        document.createTextNode(
+          `。目前等待名单中共有 ${waitingCount} 人。我们每 ${hours} 小时发送 ${invitationCount} 封邀请邮件。`
+        )
+      );
+
+      container.setAttribute(
+        MARK,
+        "1"
+      );
     });
   }
 
@@ -2251,6 +3290,14 @@
 
   // 处理个人资料编辑页的隐私提示。
   function translateProfilePrivacyNotice() {
+    if (
+      !/^\/users\/[^/]+\/profile\/edit\/?$/.test(
+        location.pathname
+      )
+    ) {
+      return;
+    }
+
     document.querySelectorAll(
       "#main p.notice"
     ).forEach(notice => {
@@ -2309,6 +3356,14 @@
 
   // 处理发布页的内容政策 / 服务条款 FAQ 提示。
   function translateWorkPolicyNotice() {
+    if (
+      !/^\/works(?:\/|$)/.test(
+        location.pathname
+      )
+    ) {
+      return;
+    }
+
     document.querySelectorAll(
       "#main p.notice"
     ).forEach(notice => {
@@ -2609,8 +3664,8 @@
       );
 
       out = out.replace(
-        /\band\b/g,
-        "以及"
+        /^(\s*)and(\s*)$/,
+        "$1以及$2"
       );
 
       if (out !== original) {
@@ -2685,6 +3740,7 @@
         "h3, h4, p, a, button, input, span, li"
       ).forEach(el => {
         if (el.hasAttribute(MARK)) return;
+        if (shouldSkipElement(el)) return;
 
         if (isHintOnlyControl(el)) {
           upsertControlHint(el);
@@ -2795,62 +3851,523 @@
     });
   }
 
+  function isPolicyTranslationPage() {
+    return /^\/(?:tos|content|privacy)\/?$/.test(
+      location.pathname
+    );
+  }
+
+
+  // ---------- 政策页（tos / content / privacy）翻译 ----------
+  // 原来对每个块单独串行请求（一页上百次），而且 li 和里面的 p
+  // 会各翻译一遍。现在：
+  //   1. 只翻译「最内层」的块；带嵌套列表的 li 只翻译它自己的那句话；
+  //   2. 把相邻的块合并成每次约 1500 字的批量请求，按换行拆回各块。
+  const POLICY_TL_CLASS = "ao3-google-policy-translation";
+  const POLICY_BLOCK_SEL = "h2, h3, h4, h5, h6, p, li, dt, dd, th, td";
+  const POLICY_NESTED_SEL = POLICY_BLOCK_SEL + ", ul, ol, dl, table";
+  const POLICY_BATCH_MAX = 1500;
+
+  function isPolicyTranslationBlock(el) {
+    if (!el) return false;
+
+    return !el.closest(
+      "nav, .navigation, .actions, form, " +
+      ".ao3-google-translate-controls, " +
+      `.${POLICY_TL_CLASS}`
+    );
+  }
+
+  // 容器元素（如带嵌套列表的 li）自己的文字，不含嵌套的块和已有译文
+  function getPolicyOwnText(el) {
+    const clone = el.cloneNode(true);
+
+    clone
+      .querySelectorAll(
+        `${POLICY_NESTED_SEL}, .${POLICY_TL_CLASS}`
+      )
+      .forEach(n => n.remove());
+
+    return normalizeText(clone.textContent || "");
+  }
+
+  function asPolicyBox(node) {
+    return node &&
+      node.classList &&
+      node.classList.contains(POLICY_TL_CLASS)
+      ? node
+      : null;
+  }
+
+  function collectPolicyItems(main) {
+    const items = [];
+
+    main
+      .querySelectorAll(POLICY_BLOCK_SEL)
+      .forEach(el => {
+        if (!isPolicyTranslationBlock(el)) return;
+
+        const nested = el.querySelector(POLICY_NESTED_SEL);
+        const appendMode = el.matches("li, dt, dd, th, td");
+
+        // 最内层的块：整块翻译
+        if (!nested) {
+          const text = normalizeText(
+            el.innerText || el.textContent || ""
+          );
+
+          if (!text) return;
+
+          items.push({
+            text,
+            place: box =>
+              appendMode
+                ? el.appendChild(box)
+                : el.insertAdjacentElement("afterend", box),
+            find: () =>
+              appendMode
+                ? el.querySelector(`:scope > .${POLICY_TL_CLASS}`)
+                : asPolicyBox(el.nextElementSibling)
+          });
+
+          return;
+        }
+
+        // 容器：只翻译它自己的文字，译文放在第一个嵌套块之前
+        const own = getPolicyOwnText(el);
+
+        if (!own) return;
+
+        items.push({
+          text: own,
+          place: box =>
+            nested.insertAdjacentElement("beforebegin", box),
+          find: () => asPolicyBox(nested.previousElementSibling)
+        });
+      });
+
+    return items;
+  }
+
+  // 把相邻的块合并成每组不超过 POLICY_BATCH_MAX 字；超长的块单独一组
+  function groupPolicyItems(items, max = POLICY_BATCH_MAX) {
+    const groups = [];
+    let cur = null;
+
+    for (const item of items) {
+      if (item.text.length > max) {
+        groups.push({ items: [item], len: item.text.length });
+        cur = null;
+        continue;
+      }
+
+      if (cur && cur.len + 1 + item.text.length <= max) {
+        cur.items.push(item);
+        cur.len += 1 + item.text.length;
+      } else {
+        cur = { items: [item], len: item.text.length };
+        groups.push(cur);
+      }
+    }
+
+    return groups;
+  }
+
+  // 批量翻译多个单行文本，返回与输入等长的结果数组
+  // （每项形如 {text, failed, total, lastError}）。
+  // 用换行拼接、按换行拆回；数量对不上就对半拆开重试，
+  // 拆到单个时走 translateLong，保证不会错位。
+  async function translateBlocksBatch(texts) {
+    if (texts.length === 1) {
+      return [await translateLong(texts[0])];
+    }
+
+    let raw = "";
+    let lastError = "";
+
+    for (let attempt = 0; attempt < 2 && !raw; attempt++) {
+      try {
+        raw = await sendTranslateRequest(texts.join("\n"));
+
+        if (!raw) lastError = "接口返回空结果";
+      } catch (error) {
+        raw = "";
+        lastError = String(error.message || error);
+      }
+    }
+
+    // 请求本身失败：不再拆分（避免出错时反而发更多请求）
+    if (!raw) {
+      return texts.map(() => ({
+        text: "",
+        failed: 1,
+        total: 1,
+        lastError
+      }));
+    }
+
+    const parts = raw
+      .split("\n")
+      .map(p => p.trim())
+      .filter(Boolean);
+
+    if (parts.length === texts.length) {
+      return parts.map(text => ({
+        text,
+        failed: 0,
+        total: 1,
+        lastError: ""
+      }));
+    }
+
+    const mid = Math.ceil(texts.length / 2);
+    const left = await translateBlocksBatch(texts.slice(0, mid));
+    const right = await translateBlocksBatch(texts.slice(mid));
+
+    return left.concat(right);
+  }
+
+  async function translatePolicyPage(
+    main,
+    button
+  ) {
+    if (!main) return;
+
+    // 已有成功译文的跳过；上次失败的删掉重翻
+    const items = collectPolicyItems(main).filter(item => {
+      const box = item.find();
+
+      if (box && box.dataset.failed === "1") {
+        box.remove();
+        return true;
+      }
+
+      return !box;
+    });
+
+    if (!items.length) {
+      button.textContent = "Google已完成本页翻译";
+      return;
+    }
+
+    button.disabled = true;
+
+    const total = items.length;
+    let done = 0;
+    let failedCount = 0;
+
+    const setProgress = () => {
+      button.textContent = `Google翻译中…（${done}/${total}）`;
+    };
+
+    setProgress();
+
+    for (const group of groupPolicyItems(items)) {
+      const boxes = group.items.map(item => {
+        const box = document.createElement("div");
+
+        box.className = POLICY_TL_CLASS;
+        box.setAttribute(MARK, "1");
+        box.textContent = "Google翻译中…";
+
+        item.place(box);
+
+        return box;
+      });
+
+      const results = await translateBlocksBatch(
+        group.items.map(item => item.text)
+      );
+
+      results.forEach((r, i) => {
+        const box = boxes[i];
+
+        if (r.failed === r.total) {
+          box.textContent =
+            `（Google翻译失败：${r.lastError || "无翻译结果"}）`;
+          box.dataset.failed = "1";
+          failedCount++;
+        } else {
+          box.textContent = r.text;
+
+          if (r.failed) {
+            box.dataset.failed = "1";
+            failedCount++;
+          }
+        }
+      });
+
+      done += group.items.length;
+      setProgress();
+    }
+
+    if (failedCount) {
+      button.textContent = `Google翻译 ${failedCount} 段失败，请点击重试`;
+      button.disabled = false;
+    } else {
+      button.textContent = "Google已完成本页翻译";
+    }
+  }
+
+
+  function insertPolicyGoogleTranslateButton() {
+    if (!isPolicyTranslationPage()) {
+      return;
+    }
+
+    const main =
+      document.querySelector("#main");
+
+    if (!main) return;
+
+    if (
+      main.querySelector(
+        ".ao3-google-translate-controls"
+      )
+   ) {
+     return;
+    }
+
+    const controls =
+      document.createElement("div");
+
+   controls.className =
+      "ao3-google-translate-controls";
+
+    controls.setAttribute(
+      MARK,
+      "1"
+    );
+
+    const button =
+     document.createElement("button");
+
+    button.type = "button";
+    button.className =
+      BTN_CLASS;
+
+    button.textContent =
+     "Google翻译本页";
+
+    button.setAttribute(
+      MARK,
+      "1"
+    );
+
+    const note =
+      document.createElement("p");
+
+    note.className =
+      "ao3-google-translate-note";
+
+   note.textContent =
+      "本页中文由 Google 翻译自动生成，仅供参考；如有歧义，请以 AO3 英文原文为准。";
+
+    note.setAttribute(
+      MARK,
+      "1"
+    );
+
+    controls.appendChild(
+      button
+   );
+
+    controls.appendChild(
+      note
+    );
+
+    const heading =
+      main.querySelector(
+        "h1, h2.heading, h2"
+      );
+
+   if (heading) {
+      heading.insertAdjacentElement(
+        "afterend",
+        controls
+      );
+    } else {
+      main.prepend(
+       controls
+     );
+    }
+
+   button.addEventListener(
+     "click",
+     () => {
+       translatePolicyPage(
+         main,
+         button
+       );
+     }
+   );
+  }
+  
+  // ---------- 长文本分块翻译 ----------
+  // 单次请求过长会被翻译接口拒绝或返回空结果，
+  // 所以按行/句子切成小块，逐块请求，再按原来的换行拼回去。
+  const CHUNK_MAX = 900;
+
+  function getBlockText(el) {
+    return (el.innerText || el.textContent || "")
+      .replace(/\r/g, "")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  function splitIntoChunks(text, max = CHUNK_MAX) {
+    const pieces = [];
+
+    text.split("\n").forEach((line, li) => {
+      const lead = li === 0 ? "" : "\n";
+
+      if (line.length <= max) {
+        pieces.push({ t: line, sep: lead });
+        return;
+      }
+
+      // 超长的单行（如用 <br> 分隔的整章）按句子再拆
+      let first = true;
+
+      for (let s of line.split(
+        /(?<=[.!?。！？…]["'”’)]*)\s+/
+      )) {
+        // 没有标点的超长句硬切
+        while (s.length > max) {
+          pieces.push({
+            t: s.slice(0, max),
+            sep: first ? lead : " "
+          });
+          first = false;
+          s = s.slice(max);
+        }
+
+        if (s) {
+          pieces.push({
+            t: s,
+            sep: first ? lead : " "
+          });
+          first = false;
+        }
+      }
+    });
+
+    const chunks = [];
+    let cur = null;
+
+    for (const p of pieces) {
+      if (
+        cur &&
+        cur.text.length + p.sep.length + p.t.length <= max
+      ) {
+        cur.text += p.sep + p.t;
+      } else {
+        cur = { sep: p.sep, text: p.t };
+        chunks.push(cur);
+      }
+    }
+
+    return chunks;
+  }
+
+  async function translateLong(text, onProgress) {
+    const chunks = splitIntoChunks(text);
+    const out = [];
+    let failed = 0;
+    let lastError = "";
+
+    for (let i = 0; i < chunks.length; i++) {
+      const c = chunks[i];
+
+      if (onProgress) onProgress(i + 1, chunks.length);
+
+      let result = "";
+
+      if (!c.text.trim()) {
+        result = c.text;
+      } else {
+        // 每块最多尝试两次
+        for (let attempt = 0; attempt < 2 && !result; attempt++) {
+          try {
+            result = await sendTranslateRequest(c.text);
+
+            if (!result) lastError = "接口返回空结果";
+          } catch (error) {
+            result = "";
+            lastError = String(error.message || error);
+          }
+        }
+
+        if (!result) {
+          failed++;
+          result = "（此段翻译失败）";
+        }
+      }
+
+      out.push((i === 0 ? "" : c.sep) + result);
+    }
+
+    return {
+      text: out.join(""),
+      failed,
+      total: chunks.length,
+      lastError
+    };
+  }
+
+  // 返回 true 表示所有段落都翻译成功
   async function translateParagraphGroup(
     paragraphs
   ) {
+    let allOk = true;
+
     for (const paragraph of paragraphs) {
-      if (
-        paragraph.nextElementSibling &&
-        paragraph.nextElementSibling.classList.contains(
-          TL_CLASS
-        )
-      ) {
-        continue;
+      const next = paragraph.nextElementSibling;
+
+      if (next && next.classList.contains(TL_CLASS)) {
+        // 上次失败的译文框删掉重翻，成功的跳过
+        if (next.dataset.failed === "1") {
+          next.remove();
+        } else {
+          continue;
+        }
       }
 
-      const text =
-        normalizeText(
-          paragraph.innerText ||
-          paragraph.textContent ||
-          ""
-        );
+      const text = getBlockText(paragraph);
 
-      if (
-        !text ||
-        text === "&nbsp;"
-      ) {
-        continue;
-      }
+      if (!normalizeText(text)) continue;
 
-      const box =
-        document.createElement("div");
+      const box = document.createElement("div");
 
-      box.className =
-        TL_CLASS;
+      box.className = TL_CLASS;
+      box.setAttribute(MARK, "1");
+      box.textContent = "Google翻译中…";
 
-      box.textContent =
-        "翻译中…";
+      paragraph.insertAdjacentElement("afterend", box);
 
-      paragraph.insertAdjacentElement(
-        "afterend",
-        box
-      );
+      const r = await translateLong(text, (i, n) => {
+        if (n > 1) {
+          box.textContent = `Google翻译中…（${i}/${n}）`;
+        }
+      });
 
-      try {
-        const translated =
-          await sendTranslateRequest(text);
-
+      if (r.failed === r.total) {
         box.textContent =
-          translated ||
-          "（无翻译结果）";
-      } catch (error) {
-        box.textContent =
-          `（翻译失败：${String(
-            error.message ||
-            error
-          )}）`;
+          `（Google翻译失败：${r.lastError || "无翻译结果"}）`;
+        box.dataset.failed = "1";
+        allOk = false;
+      } else {
+        box.textContent = r.text;
+
+        if (r.failed) {
+          box.dataset.failed = "1";
+          allOk = false;
+        }
       }
     }
+
+    return allOk;
   }
 
   async function translateChapter(
@@ -2863,15 +4380,118 @@
       ...section.querySelectorAll("p")
     ];
 
-    button.disabled = true;
-    button.textContent = "翻译中…";
-
-    await translateParagraphGroup(
-      paragraphs
+    const bodyLen = paragraphs.reduce(
+      (n, p) => n + (p.innerText || "").length,
+      0
     );
 
-    button.textContent =
-      "已翻译本章";
+    button.disabled = true;
+    button.textContent = "Google翻译中…";
+
+    // 正常的多段落章节：逐段翻译，译文跟在每段后面。
+    // 整章只有 0~2 个 <p>（正文靠 <br> 分隔）时，
+    // 逐段插入没有意义，走整章翻译，译文放在章节顶部。
+    if (
+      paragraphs.length >= 3 ||
+      (paragraphs.length > 0 && bodyLen <= 1500)
+    ) {
+      const ok = await translateParagraphGroup(
+        paragraphs
+      );
+
+      button.textContent = ok
+        ? "Google已完成本章翻译"
+        : "Google翻译部分段落失败，请点击重试";
+      button.disabled = ok;
+
+      return;
+    }
+
+    const existing = section.querySelector(
+      ".ao3-full-chapter-translation"
+    );
+
+    if (existing) {
+      if (existing.dataset.failed !== "1") {
+        button.textContent = "Google已完成本章翻译";
+        return;
+      }
+
+      existing.remove();
+    }
+
+    const clone = section.cloneNode(true);
+
+    // 不翻译章节标题、按钮和已有译文。
+    clone.querySelectorAll(
+      "h1, h2, h3, h4, h5, h6, " +
+      "button, " +
+      `.${BTN_CLASS}, ` +
+      `.${TL_CLASS}`
+    ).forEach(el => {
+      el.remove();
+    });
+
+    // 脱离文档的节点，innerText 等同 textContent，<br> 会丢失，
+    // 所以放到屏幕外渲染后再读取（不能用 visibility:hidden，
+    // 否则 innerText 会把隐藏文字排除掉）。
+    clone.setAttribute("aria-hidden", "true");
+    clone.style.cssText =
+      "position:fixed;left:-99999px;top:0;" +
+      "width:800px;pointer-events:none;";
+
+    document.body.appendChild(clone);
+
+    const text = getBlockText(clone);
+
+    clone.remove();
+
+    if (!text) {
+      button.textContent = "未找到可翻译正文";
+      button.disabled = false;
+      return;
+    }
+
+    const box = document.createElement("div");
+
+    box.className =
+      `${TL_CLASS} ao3-full-chapter-translation`;
+    box.setAttribute(MARK, "1");
+    box.textContent = "Google翻译中…";
+
+    if (section.contains(button)) {
+      button.insertAdjacentElement("afterend", box);
+    } else {
+      section.insertBefore(box, section.firstChild);
+    }
+
+    const r = await translateLong(text, (i, n) => {
+      const msg = `Google翻译中…（${i}/${n}）`;
+
+      box.textContent = msg;
+      button.textContent = msg;
+    });
+
+    if (r.failed === r.total) {
+      box.textContent =
+        `（Google翻译失败：${r.lastError || "无翻译结果"}）`;
+      box.dataset.failed = "1";
+      button.textContent = "Google翻译失败，请点击重试";
+      button.disabled = false;
+      return;
+    }
+
+    box.textContent = r.text;
+
+    if (r.failed) {
+      box.dataset.failed = "1";
+      button.textContent =
+        `Google翻译 ${r.failed}/${r.total} 段失败，请点击重试`;
+      button.disabled = false;
+      return;
+    }
+
+    button.textContent = "Google已完成本章翻译";
   }
 
   async function translateNotes(
@@ -2880,23 +4500,37 @@
   ) {
     if (!section) return;
 
+    const label =
+      section.matches(".summary")
+        ? "简介"
+        : "备注";
+
+    const quote =
+      section.querySelector(
+        "blockquote.userstuff"
+      );
+
+    if (!quote) return;
+
     const paragraphs = [
-      ...section.querySelectorAll(
-        "blockquote.userstuff p"
-      )
+      ...quote.querySelectorAll("p")
     ];
 
-    if (!paragraphs.length) return;
-
     button.disabled = true;
-    button.textContent = "翻译中…";
+    button.textContent = "Google翻译中…";
 
-    await translateParagraphGroup(
-      paragraphs
+    // 没有 <p>（只用 <br> 或纯文本）时，把整块 blockquote 当作一段翻译。
+    const ok = await translateParagraphGroup(
+      paragraphs.length
+        ? paragraphs
+        : [quote]
     );
 
-    button.textContent =
-      "已翻译备注";
+    button.textContent = ok
+      ? `Google已完成${label}翻译`
+      : "Google翻译失败，请点击重试";
+
+    button.disabled = ok;
   }
 
   function insertTranslateButtons() {
@@ -2935,7 +4569,7 @@
         BTN_CLASS;
 
       button.textContent =
-        "翻译本章";
+        "Google翻译本章";
 
       button.addEventListener(
         "click",
@@ -2953,8 +4587,8 @@
 
     const noteModules =
       document.querySelectorAll(
-        ".chapter .notes.module, " +
-        ".notes.module"
+        ".notes.module, " +
+        ".summary.module"
       );
 
     noteModules.forEach(section => {
@@ -2987,58 +4621,9 @@
         NOTES_BTN_CLASS;
 
       button.textContent =
-        "翻译备注";
-
-      button.addEventListener(
-        "click",
-        () => translateNotes(
-          section,
-          button
-        )
-      );
-
-      heading.insertAdjacentElement(
-        "afterend",
-        button
-      );
-    });
-
-    const endNotes =
-      document.querySelectorAll(
-        "#work_endnotes.end.notes.module"
-      );
-
-    endNotes.forEach(section => {
-      if (
-        section.querySelector(
-          `.${NOTES_BTN_CLASS}`
-        )
-      ) {
-        return;
-      }
-
-      const heading =
-        section.querySelector(
-          "h3.heading"
-        );
-
-      const quote =
-        section.querySelector(
-          "blockquote.userstuff"
-        );
-
-      if (!heading || !quote) return;
-
-      const button =
-        document.createElement("button");
-
-      button.type = "button";
-
-      button.className =
-        NOTES_BTN_CLASS;
-
-      button.textContent =
-        "翻译备注";
+        section.matches(".summary")
+          ? "Google翻译简介"
+          : "Google翻译备注";
 
       button.addEventListener(
         "click",
@@ -3055,8 +4640,42 @@
     });
   }
 
+  // AO3 自动补全组件的三句提示语（开始输入 / 无结果 / 搜索中）存放在输入框的
+  // data-autocomplete-*-text 属性里，由 AO3 的脚本在下拉框里显示。
+  // 直接把属性值换成中文，AO3 自己写入下拉框的就是中文，不依赖观察时机。
+  // 不检查 MARK：这些输入框往往已被标记过，但属性值还是英文。
+  const AUTOCOMPLETE_TEXT_ATTRS = [
+    "data-autocomplete-hint-text",
+    "data-autocomplete-no-results-text",
+    "data-autocomplete-searching-text"
+  ];
+
+  function translateAutocompleteAttributes(root = document) {
+    root
+      .querySelectorAll(
+        AUTOCOMPLETE_TEXT_ATTRS
+          .map(a => `input[${a}]`)
+          .join(", ")
+      )
+      .forEach(input => {
+        for (const attr of AUTOCOMPLETE_TEXT_ATTRS) {
+          const value = input.getAttribute(attr);
+
+          if (!value) continue;
+
+          const translated = translateTextValue(value);
+
+          if (translated !== value) {
+            input.setAttribute(attr, translated);
+          }
+        }
+      });
+  }
+
   function runAll() {
     injectStyles();
+
+    translateAutocompleteAttributes();
 
     applyControlHints(
       document.body
@@ -3067,9 +4686,18 @@
     );
 
     // 混合文字与链接的专门处理必须先于通用翻译。
+    translateTosPromptAgreementNotice();
     translateWorkPolicyNotice();
     translateProfilePrivacyNotice();
     translatePseudUsernameNotice();
+    translateBlockedUsersNotice();
+    translateUnblockUserNotice();
+    translateMuteUserNotice();
+    translateUnmuteUserNotice();
+    translateMutedUsersNotice();
+    translateInviteRequestIntroNotice();
+    translateInviteRequestStatusNotice();
+  
 
     // 笔名页面专用处理。
     translatePseudActionLinks();
@@ -3094,7 +4722,42 @@
     translateDashboardUI();
     translateFirstLoginBanner();
     translateDeleteCommentModal();
+
+    insertPolicyGoogleTranslateButton();
     insertTranslateButtons();
+  }
+
+  // 动态更新的单个文本节点（AO3 脚本用 .text()/.html() 写入的提示语等）。
+  // 与 translateTextNodes 的区别：不因父元素已有 MARK 而跳过——
+  // 父元素可能是之前翻译过、后来被脚本改回英文的。
+  // lastSet 用来避免自己写入 nodeValue 后又被观察到而重复处理。
+  const lastSet = new WeakMap();
+
+  function translateOneTextNode(node) {
+    const parent = node.parentElement;
+
+    if (!parent) return;
+    if (parent.closest("head")) return;
+    if (parent.closest(`.${POLICY_TL_CLASS}`)) return;
+    if (lastSet.get(node) === node.nodeValue) return;
+    if (shouldSkipElement(parent)) return;
+
+    const control = parent.closest(
+      "button, a.button, .actions a"
+    );
+
+    if (control && isHintOnlyControl(control)) return;
+
+    const original = node.nodeValue;
+
+    if (!normalizeText(original)) return;
+
+    const translated = translateTextValue(original);
+
+    if (translated !== original) {
+      node.nodeValue = translated;
+      lastSet.set(node, translated);
+    }
   }
 
   function setupObserver() {
@@ -3106,20 +4769,29 @@
           let hasNewElements = false;
 
           for (const mutation of mutations) {
+            // 已有文本节点的内容被改写
+            if (mutation.type === "characterData") {
+              translateOneTextNode(mutation.target);
+              continue;
+            }
+
             for (
               const node of mutation.addedNodes
             ) {
+              // 新增的纯文本节点：直接翻译，不必整页重跑
+              if (node.nodeType === Node.TEXT_NODE) {
+                translateOneTextNode(node);
+                continue;
+              }
+
               if (
                 node.nodeType ===
                   Node.ELEMENT_NODE &&
                 !node.hasAttribute(MARK)
               ) {
                 hasNewElements = true;
-                break;
               }
             }
-
-            if (hasNewElements) break;
           }
 
           if (!hasNewElements) return;
@@ -3139,7 +4811,8 @@
       document.documentElement,
       {
         childList: true,
-        subtree: true
+        subtree: true,
+        characterData: true
       }
     );
   }
