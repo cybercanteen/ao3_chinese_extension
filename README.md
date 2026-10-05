@@ -1,6 +1,6 @@
 # AO3中文助手
 
-AO3中文助手是一个Chrome浏览器扩展，用于改善简体中文用户在Archive of Our Own（AO3上的使用体验。
+AO3中文助手是一个Chrome浏览器扩展，用于改善简体中文用户在Archive of Our Own（AO3）上的使用体验。
 
 插件会将AO3的常见界面翻译为简体中文，并为作品正文、简介、作者备注及部分政策页面提供Google翻译按钮。
 
@@ -84,7 +84,7 @@ https://github.com/cybercanteen/ao3_chinese_extension
 
 本项目是一个非商业性的社区工具。
 
-本项目与Organization for Transformative Works（OTW）及 Archive of Our Own（AO3无隶属或官方关联。
+本项目与Organization for Transformative Works（OTW）及 Archive of Our Own（AO3）无隶属或官方关联。
 
 ## License
 
