@@ -1,12 +1,12 @@
 # Changelog
 
-# 1.1.2
+## 1.1.2
 
 - 增加静音与屏蔽页面汉化：补充用户静音、屏蔽、解除静音与解除屏蔽等相关页面及提示文字的中文翻译。
 Expanded mute and block page localization: Added Simplified Chinese translations for mute, block, unmute, unblock, and related notices and confirmation pages.
 - 为 AO3 政策页面添加 Google 翻译：在部分用户政策页面提供 Google 翻译按钮，同时保留英文原文供对照。
 Added Google Translate support for AO3 policy pages: Selected policy pages can now be translated with Google Translate while keeping the original English text visible for reference.
-- 改进章节、简介与备注翻译：修复部分使用 <br> 或其他特殊排版的作品点击翻译后无法正常显示译文的问题，并提升简介与作者备注的翻译兼容性。
+- 改进章节、简介与备注翻译：修复部分使用 `<br>` 或其他特殊排版的作品点击翻译后无法正常显示译文的问题，并提升简介与作者备注的翻译兼容性。
 Improved chapter, summary, and notes translation: Fixed cases where translations were not displayed correctly for works using <br> or other non-standard formatting, and improved translation compatibility for summaries and author notes.
 - 支持长章节分段翻译与失败重试：较长的章节会自动分段处理，并在部分或全部翻译失败时提供明确提示和重试选项。
 Added chunked translation and retry support for long chapters: Long chapters are now automatically split into smaller sections for translation, with clearer failure messages and retry options.
