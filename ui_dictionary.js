@@ -1,6 +1,10 @@
 // ui_dictionary.js
 window.AO3_UI_DICT = {
   exact: {
+    // AO3 维护公告（页面可能不加载完整 AO3 模板）
+    "The archive is down for maintenance.": "AO3 正在维护中，暂时无法访问。",
+    "status page": "服务状态页面",
+
     // 顶部 / 全站常规 UI
     "My Dashboard": "我的后台",
     "My Works": "我的作品",
@@ -92,7 +96,7 @@ window.AO3_UI_DICT = {
     "Next Chapter": "下一章",
 
     // users/pseuds
-    "New Pseud": "新建笔名",
+    "New Pseud": "创建新笔名",
     "Pseuds": "笔名列表",
     "Editing pseud": "编辑笔名",
     "Back To Pseuds": "返回笔名列表",
@@ -439,6 +443,20 @@ window.AO3_UI_DICT = {
     "Change Username": "修改用户名",
     "Change Password": "修改密码",
     "Change Email": "修改邮箱",
+    // 修改邮箱页面：提示、表单标签及验证错误
+    "You must enter your password.": "你必须输入密码。",
+    "Changing your email will send a request for confirmation to your new email address and a notification to your current email address.": "修改邮箱地址后，我们会向新邮箱发送确认邮件，并向原邮箱发送通知。",
+    "You must use the link in the confirmation email in order to finish confirming your email change. If you don't confirm your request within 7 days, the link will expire and your email address will not be changed.": "你需要点击确认邮件中的链接，才能更新邮箱地址。请在7天内完成确认，否则链接将失效，邮箱地址也不会被更改。",
+    "Current email": "当前邮箱",
+    "New email": "新邮箱",
+    "Enter new email again": "再次输入新邮箱",
+    "Password": "密码",
+    "Confirm New Email": "确认新邮箱",
+    // 修改密码页面
+    "Old password": "原密码",
+    "New password": "新密码",
+    "Confirm new password": "确认新密码",
+    "8 to 72 characters": "长度须为8–72个字符",
     // "Privacy" 已在 works/new 区定义，此处删除重复键
     "Privacy preferences": "隐私设置说明",
     "Display": "显示设置",

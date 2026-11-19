@@ -4672,6 +4672,401 @@
       });
   }
 
+  // AO3 维护公告使用与常规页面不同的简化结构（header + main）。
+  // 仅在英文标题和官方状态链接都符合时汉化，不改动链接地址或页面功能。
+  function translateMaintenancePage() {
+    const main = document.querySelector("body > main");
+    const heading = main?.querySelector(":scope > h2");
+
+    if (
+      !heading ||
+      normalizeText(heading.textContent) !==
+        "The archive is down for maintenance."
+    ) {
+      return;
+    }
+
+    const notice = main.querySelector(":scope > p");
+    if (!notice) return;
+
+    const links = Array.from(notice.querySelectorAll("a"));
+    const linkForHost = hostname =>
+      links.find(link => {
+        try {
+          const url = new URL(link.href);
+          return url.protocol === "https:" && url.hostname === hostname;
+        } catch (_) {
+          return false;
+        }
+      });
+
+    const statusLink = linkForHost("www.otwstatus.org");
+    const blueskyLink = linkForHost("bsky.app");
+    const tumblrLink = linkForHost("ao3org.tumblr.com");
+
+    // 维护公告句子分散在多个文本节点与链接中；逐字典替换会破坏中文语序。
+    // 链接缺失或页面改版时不强行重建段落，以免损坏原始提示。
+    if (statusLink && blueskyLink && tumblrLink && links.length === 3) {
+      statusLink.textContent = "服务状态页面";
+      notice.replaceChildren(
+        document.createTextNode("如需了解最新动态，请查看我们的"),
+        statusLink,
+        document.createTextNode("，或关注 Bluesky 上的 "),
+        blueskyLink,
+        document.createTextNode(" 及 Tumblr 上的 "),
+        tumblrLink,
+        document.createTextNode("。")
+      );
+      notice.setAttribute(MARK, "1");
+    }
+
+    heading.textContent = "AO3 正在维护中，暂时无法访问。";
+    heading.setAttribute(MARK, "1");
+
+    // 标签页标题也翻译，但保留 AO3 品牌名及原始错误语义。
+    if (document.title === "Request temporarily denied. | Archive of Our Own") {
+      document.title = "请求暂时被拒绝 | Archive of Our Own";
+    }
+  }
+
+  // AO3 恢复访问后的官方公告横幅。只识别这一条确定的公告，
+  // 逐个修改现有文本节点，保留加粗、状态链接及关闭功能。
+  function translateRecoveryAnnouncement() {
+    const paragraph = document.querySelector(
+      "#admin-banner.alert.announcement .userstuff > p"
+    );
+
+    if (!paragraph || paragraph.hasAttribute(MARK)) return;
+
+    const strongs = Array.from(paragraph.children).filter(
+      el => el.tagName === "STRONG"
+    );
+    if (strongs.length !== 3) return;
+
+    const statusLink = strongs[2].querySelector("a[href]");
+    if (!statusLink || strongs[2].querySelectorAll("a").length !== 1) return;
+
+    try {
+      const url = new URL(statusLink.getAttribute("href"), location.href);
+      if (
+        url.protocol !== "https:" ||
+        url.hostname !== "www.otwstatus.org" ||
+        !url.pathname.startsWith("/incidents/")
+      ) return;
+    } catch (_) {
+      return;
+    }
+
+    const directTextNodes = Array.from(paragraph.childNodes).filter(
+      node => node.nodeType === Node.TEXT_NODE && normalizeText(node.nodeValue)
+    );
+    const linkSectionTextNodes = Array.from(strongs[2].childNodes).filter(
+      node => node.nodeType === Node.TEXT_NODE && normalizeText(node.nodeValue)
+    );
+
+    // 文案或结构发生变化时，保持 AO3 官方原文，不强行替换。
+    if (
+      directTextNodes.length !== 3 ||
+      linkSectionTextNodes.length !== 2 ||
+      normalizeText(directTextNodes[0].nodeValue) !== "AO3 is now up!" ||
+      normalizeText(strongs[0].textContent) !== "No data has been deleted." ||
+      !normalizeText(directTextNodes[1].nodeValue).startsWith(
+        "Some features have been temporarily disabled"
+      ) ||
+      !normalizeText(directTextNodes[1].nodeValue).endsWith(
+        "works can only be downloaded in HTML format."
+      ) ||
+      normalizeText(strongs[1].textContent) !== "These features will be restored." ||
+      normalizeText(directTextNodes[2].nodeValue) !==
+        "No icons have been deleted, they are simply not being displayed currently." ||
+      normalizeText(linkSectionTextNodes[0].nodeValue) !==
+        "For more information, refer to" ||
+      normalizeText(statusLink.textContent) !== "our status page" ||
+      normalizeText(linkSectionTextNodes[1].nodeValue) !== "."
+    ) return;
+
+    directTextNodes[0].nodeValue = "AO3 现已恢复访问！";
+    strongs[0].textContent = "所有数据均未被删除。";
+    directTextNodes[1].nodeValue =
+      "为了让网站能在四周期限之前恢复访问，我们暂时停用了部分功能。" +
+      "目前，站内图标（包括用户头像、作品集图标等）暂不显示，" +
+      "无法从外部网站导入作品，且作品仅支持以 HTML 格式下载。";
+    strongs[1].textContent = "这些功能将恢复。";
+    directTextNodes[2].nodeValue =
+      "所有图标均未被删除，只是目前暂时不显示。";
+    linkSectionTextNodes[0].nodeValue = "如需了解更多信息，请查看我们的";
+    statusLink.textContent = "状态页面";
+    linkSectionTextNodes[1].nodeValue = "。";
+    paragraph.setAttribute(MARK, "1");
+  }
+
+  // 翻译「关注用户成功」的站内通知，保留原有订阅管理链接。
+  // 只处理与 AO3 实际通知完全匹配的文案，避免误翻译其他 flash。
+  function translateFollowSuccessNotice() {
+    document.querySelectorAll("#main .flash.notice").forEach(notice => {
+      const fullText = normalizeText(notice.textContent || "");
+      const match = fullText.match(
+        /^You are now following (.+?)\. If you['’]d like to stop receiving email updates, you can unsubscribe from your Subscriptions page\.$/i
+      );
+      if (!match) return;
+
+      // 只处理含一个 AO3 站内订阅管理链接的通知。
+      const links = Array.from(notice.querySelectorAll("a[href]"));
+      if (links.length !== 1) return;
+      const link = links[0];
+      try {
+        const url = new URL(link.getAttribute("href"), location.href);
+        if (
+          url.origin !== location.origin ||
+          !/^\/users\/[^/]+\/subscriptions\/?$/.test(url.pathname)
+        ) return;
+      } catch (_) {
+        return;
+      }
+
+      link.textContent = "订阅页面";
+      link.setAttribute(MARK, "1");
+      notice.replaceChildren(
+        document.createTextNode(
+          `你已成功订阅 ${match[1]}。如果不想继续接收邮件通知，可以前往你的`
+        ),
+        link,
+        document.createTextNode("取消订阅。")
+      );
+      notice.setAttribute(MARK, "1");
+    });
+  }
+
+  // 修改用户名页面：只处理已确认的官方提示和表单标签。
+  // 注意：部分原始英文元素虽带有 MARK，仍需按英文内容判断，不能直接跳过。
+  function translateChangeUsernamePage() {
+    const main = document.querySelector("#main.users-change_username");
+    if (!main || !/^\/users\/[^/]+\/change_username\/?$/.test(location.pathname)) {
+      return;
+    }
+
+    // 将 AO3 动态提供的时间转为中文格式，不进行时区转换。
+    // 若时间格式变化，保留完整原文，避免误报时间。
+    function formatChangeTime(value) {
+      const date = value.match(
+        /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s*(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4})\s+(\d{2}:\d{2}:\d{2})\s+([+-])(\d{2})(\d{2})$/i
+      );
+      if (!date) return value;
+
+      const months = {
+        jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+        jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12
+      };
+      const weekdays = {
+        mon: "一", tue: "二", wed: "三", thu: "四",
+        fri: "五", sat: "六", sun: "日"
+      };
+      const weekday = weekdays[date[1].toLowerCase()];
+      const month = months[date[3].toLowerCase()];
+      return `${date[4]} 年 ${month} 月 ${Number(date[2])} 日（周${weekday}）` +
+        `${date[5]}（UTC${date[6]}${date[7]}:${date[8]}）`;
+    }
+
+    const caution = main.querySelector(".caution.notice");
+    if (caution) {
+      const paragraphs = Array.from(caution.querySelectorAll(":scope > p"));
+
+      // 第一段：保留原有 strong 元素及动态的上次改名时间。
+      for (const paragraph of paragraphs) {
+        const fullText = normalizeText(paragraph.textContent || "");
+        const match = fullText.match(
+          /^Please use this feature with caution\. You can change your username once per day\. You last changed your username on (.+)\.$/i
+        );
+        if (!match) continue;
+
+        const strong = paragraph.querySelector(":scope > strong");
+        if (!strong || paragraph.children.length !== 1 ||
+            normalizeText(strong.textContent) !== "Please use this feature with caution.") {
+          continue;
+        }
+        strong.textContent = "请谨慎使用此功能。";
+        paragraph.replaceChildren(
+          strong,
+          document.createTextNode(
+            `用户名每天只能修改一次。你上次修改用户名的时间为：${formatChangeTime(match[1])}。`
+          )
+        );
+        paragraph.setAttribute(MARK, "1");
+      }
+
+      // 第二段：复用原有 FAQ、技术支持链接及其所有属性。
+      for (const paragraph of paragraphs) {
+        const fullText = normalizeText(paragraph.textContent || "");
+        if (!/^For information on how changing your username will affect your account, please check out the Account FAQ\. Note that changes to your username may take several days or longer to appear\. If you are still seeing your old username on your works, bookmarks, series, or collections after a week, please contact Support\.$/i.test(fullText)) {
+          continue;
+        }
+
+        const links = Array.from(paragraph.querySelectorAll("a[href]"));
+        if (links.length !== 2) continue;
+        const [faqLink, supportLink] = links;
+        let faqUrl, supportUrl;
+        try {
+          faqUrl = new URL(faqLink.getAttribute("href"), location.href);
+          supportUrl = new URL(supportLink.getAttribute("href"), location.href);
+        } catch (_) {
+          continue;
+        }
+        if (faqUrl.origin !== location.origin ||
+            faqUrl.pathname !== "/faq/your-account" ||
+            faqUrl.hash !== "#namechange" ||
+            supportUrl.origin !== location.origin ||
+            supportUrl.pathname !== "/support" ||
+            normalizeText(faqLink.textContent) !== "Account FAQ" ||
+            normalizeText(supportLink.textContent) !== "contact Support") {
+          continue;
+        }
+
+        // 指向 AO3 官方简体中文 FAQ 的“修改用户名”条目。
+        faqLink.setAttribute(
+          "href",
+          "https://archiveofourown.org/faq/your-account?language_id=zh-Hans#namechange"
+        );
+        faqLink.textContent = "账号常见问题（FAQ）";
+        supportLink.textContent = "联系技术支持";
+        faqLink.setAttribute(MARK, "1");
+        supportLink.setAttribute(MARK, "1");
+        paragraph.replaceChildren(
+          document.createTextNode("如需了解修改用户名会对账号产生哪些影响，请参阅"),
+          faqLink,
+          document.createTextNode(
+            "。请注意，用户名变更可能需要数天或更长时间才能在网站各处显示。" +
+            "如果一周后，你的作品、书签、系列或合集仍显示旧用户名，请"
+          ),
+          supportLink,
+          document.createTextNode("。")
+        );
+        paragraph.setAttribute(MARK, "1");
+      }
+    }
+
+    // 创建新笔名的说明：只改显示文本，不改链接地址。
+    main.querySelectorAll("p.note").forEach(paragraph => {
+      const fullText = normalizeText(paragraph.textContent || "");
+      if (fullText !==
+          "If that is not what you want, you can create a new Pseud instead.") {
+        return;
+      }
+      const links = Array.from(paragraph.querySelectorAll("a[href]"));
+      if (links.length !== 1) return;
+      const link = links[0];
+      let url;
+      try {
+        url = new URL(link.getAttribute("href"), location.href);
+      } catch (_) {
+        return;
+      }
+      if (url.origin !== location.origin ||
+          !/^\/users\/[^/]+\/pseuds\/new\/?$/.test(url.pathname) ||
+          normalizeText(link.textContent) !== "create a new Pseud") {
+        return;
+      }
+      link.textContent = "创建新笔名";
+      link.setAttribute(MARK, "1");
+      paragraph.replaceChildren(
+        document.createTextNode("如果你只是想使用其他署名，可以改为"),
+        link,
+        document.createTextNode("。")
+      );
+      paragraph.setAttribute(MARK, "1");
+    });
+
+    // 表单只修改可见说明文字，绝不触碰用户名值、密码、提交目标和隐藏令牌。
+    const form = main.querySelector('form[action]');
+    if (!form) return;
+    let action;
+    try {
+      action = new URL(form.getAttribute("action"), location.href);
+    } catch (_) {
+      return;
+    }
+    if (action.origin !== location.origin ||
+        !/^\/users\/[^/]+\/changed_username\/?$/.test(action.pathname)) {
+      return;
+    }
+
+    form.querySelectorAll("dt").forEach(dt => {
+      if (dt.children.length) return;
+      const current = normalizeText(dt.textContent || "");
+      if (current === "Current username") {
+        dt.textContent = "当前用户名";
+        dt.setAttribute(MARK, "1");
+      } else if (current === "Submit" && dt.classList.contains("landmark")) {
+        dt.textContent = "提交";
+        dt.setAttribute(MARK, "1");
+      }
+    });
+
+    const fields = [
+      ["new_login", "New username", "新用户名"],
+      ["password", "Password", "密码"]
+    ];
+    fields.forEach(([id, original, translated]) => {
+      const label = form.querySelector(`label[for="${id}"]`);
+      if (label && normalizeText(label.textContent || "") === original &&
+          label.children.length === 0) {
+        label.textContent = translated;
+        label.setAttribute(MARK, "1");
+      }
+    });
+
+    const footnote = form.querySelector("#new-login-field-description");
+    if (footnote && footnote.children.length === 0 &&
+        /^3 to 40 characters \(A[–-]Z, a[–-]z, _, 0[–-]9 only\), no spaces, cannot begin or end with underscore \(_\)\.?$/i.test(
+          normalizeText(footnote.textContent || "")
+        )) {
+      footnote.textContent =
+        "用户名须为 3–40 个字符，只能使用英文字母、数字及下划线（_）；" +
+        "不能包含空格，且不能以下划线开头或结尾。";
+      footnote.setAttribute(MARK, "1");
+    }
+  }
+
+  // 修改邮箱页面及表单验证失败后的确认页：精确翻译带加粗的第三段警告，
+  // 保留原有 strong 标签。普通提示和表单标签由 ui_dictionary.js 负责。
+  function translateChangeEmailPage() {
+    const main = document.querySelector(
+      "#main.users-change_email, #main.users-confirm_change_email"
+    );
+    if (!main || !/^\/users\/[^/]+\/(?:change_email|confirm_change_email)\/?$/.test(location.pathname)) {
+      return;
+    }
+
+    main.querySelectorAll(":scope > .notice > p").forEach(paragraph => {
+      const fullText = normalizeText(paragraph.textContent || "");
+      if (fullText !==
+          "Resubmitting this form with a new email address will invalidate any pending email change requests.") {
+        return;
+      }
+
+      const strong = paragraph.querySelector(":scope > strong");
+      if (!strong || paragraph.children.length !== 1 ||
+          normalizeText(strong.textContent || "") !==
+            "invalidate any pending email change requests") {
+        return;
+      }
+
+      const textNodes = Array.from(paragraph.childNodes).filter(
+        node => node.nodeType === Node.TEXT_NODE && normalizeText(node.nodeValue)
+      );
+      if (textNodes.length !== 2 ||
+          normalizeText(textNodes[0].nodeValue) !==
+            "Resubmitting this form with a new email address will" ||
+          normalizeText(textNodes[1].nodeValue) !== ".") {
+        return;
+      }
+
+      textNodes[0].nodeValue = "如果再次使用此表单提交新的邮箱地址，";
+      strong.textContent = "之前尚未完成的邮箱更新请求将全部失效";
+      textNodes[1].nodeValue = "。";
+      paragraph.setAttribute(MARK, "1");
+    });
+  }
+
   function runAll() {
     injectStyles();
 
@@ -4686,6 +5081,11 @@
     );
 
     // 混合文字与链接的专门处理必须先于通用翻译。
+    translateMaintenancePage();
+    translateRecoveryAnnouncement();
+    translateFollowSuccessNotice();
+    translateChangeUsernamePage();
+    translateChangeEmailPage();
     translateTosPromptAgreementNotice();
     translateWorkPolicyNotice();
     translateProfilePrivacyNotice();
