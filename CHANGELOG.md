@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.5
+
+- 增加 AO3 站点公告汉化：支持维护页面、恢复访问公告及部分站内通知的中文显示，包括订阅成功提示。
+Added AO3 site announcement localization: Added Simplified Chinese support for maintenance pages, service restoration announcements, and selected site notifications, including subscription confirmations.
+- 完善账号设置页面汉化：补充“修改用户名”“修改密码”和“修改邮箱”三个页面的中文翻译，包括表单字段、操作说明、警告信息及验证提示。
+Expanded account settings localization: Added Simplified Chinese translations for the Change Username, Change Password, and Change Email pages, including form fields, instructions, warnings, and validation messages.
+
+## 1.1.3 & 1.1.4
+
+- 版本未发布：由于提交至 Chrome Web Store 时遇到上传问题，1.1.3 和 1.1.4 未能正式发布，后续更新统一纳入 1.1.5。
+Unreleased versions: Versions 1.1.3 and 1.1.4 were not published due to Chrome Web Store upload issues. Subsequent updates were consolidated into version 1.1.5.
+  
 ## 1.1.2
 
 - 增加静音与屏蔽页面汉化：补充用户静音、屏蔽、解除静音与解除屏蔽等相关页面及提示文字的中文翻译。
